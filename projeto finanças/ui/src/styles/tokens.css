@@ -1,0 +1,124 @@
+/* ============================================================
+   FINANÇAS: Sistema de cor
+   Paleta "Oliva & Terracota".
+
+   Base neutra QUENTE (marrom-tinta no escuro, pergaminho no claro)
+   com acento OLIVA: um verde puxado para o amarelo, cor de azeitona
+   e latão envelhecido. Nada de ciano, azul ou teal, que é o
+   território do Synchro; e nada de roxo/indigo de template.
+
+   O par oliva + terracota é o eixo da identidade: dois terrosos que
+   se completam sem competir, um frio-esverdeado e outro quente.
+
+   REGRA: nenhuma cor hardcoded fora deste arquivo. Componentes só
+   consomem var(--fin-*). É isso que faz o tema claro/escuro
+   funcionar sem duplicar um único componente.
+   ============================================================ */
+
+:root {
+  /* ── Superfícies (dark, padrão) ── */
+  --fin-bg: #15130E;          /* fundo da app        */
+  --fin-bg-2: #100F0A;        /* sidebar / topbar    */
+  --fin-bg-3: #201D15;        /* inputs, hover       */
+  --fin-surface: #1A1812;     /* cards               */
+
+  --fin-border: rgba(235, 226, 208, 0.09);
+  --fin-border-mid: rgba(235, 226, 208, 0.18);
+
+  --fin-text: #EBE2D0;
+  --fin-muted: #948C79;
+
+  /* ── Acento de marca (ações, foco, item ativo) ── */
+  --fin-accent: #A8BD52;
+  --fin-accent-dim: rgba(168, 189, 82, 0.13);
+  --fin-accent-mid: rgba(168, 189, 82, 0.30);
+  --fin-accent-ink: #161A06;  /* texto sobre o acento cheio */
+
+  /* ── Semântica financeira ──
+     Entradas = oliva (mesma família do acento: dinheiro é a marca).
+     Saídas   = terracota, não vermelho-alerta: gastar não é erro.
+     Alerta   = ocre; só o que exige ação vira vermelho-tijolo.
+
+     Os quatro ficam em matizes bem separados para o olho distinguir
+     na fileira de KPIs sem precisar ler o rótulo. */
+  --fin-in: #A8BD52;
+  --fin-in-soft: rgba(168, 189, 82, 0.15);
+  --fin-out: #C4603C;
+  --fin-out-soft: rgba(196, 96, 60, 0.14);
+  --fin-warn: #D2A32B;
+  --fin-warn-soft: rgba(210, 163, 43, 0.14);
+  --fin-danger: #B3402F;
+  --fin-danger-soft: rgba(179, 64, 47, 0.14);
+
+  /* ── Categóricas (gráficos) ──
+     6 matizes distinguíveis, todas no mesmo grau de saturação para
+     nenhuma "gritar" mais que a outra. A ardósia entra de propósito
+     com pouca saturação: serve de respiro entre as quentes. */
+  --fin-cat-1: #C4603C;   /* terracota  */
+  --fin-cat-2: #D2A32B;   /* ocre       */
+  --fin-cat-3: #A8BD52;   /* oliva      */
+  --fin-cat-4: #5F8F63;   /* musgo      */
+  --fin-cat-5: #A0617C;   /* ameixa     */
+  --fin-cat-6: #77808C;   /* ardósia    */
+
+  /* ── Forma ──
+     Raio pequeno e sombra quase inexistente: a hierarquia vem da
+     borda e do peso do texto, não de card flutuante. */
+  --fin-radius: 5px;
+  --fin-radius-lg: 8px;
+  --fin-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+
+  --fin-font: ui-sans-serif, system-ui, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --fin-font-num: ui-monospace, "SF Mono", "Cascadia Mono", "Segoe UI Mono", Menlo, monospace;
+
+  --fin-sidebar-w: 208px;
+  --fin-topbar-h: 52px;
+  --fin-bottomnav-h: 56px;
+  --fin-transition: 0.18s cubic-bezier(0.4, 0, 0.2, 1);
+
+  color-scheme: dark;
+}
+
+/* ── Tema claro: "pergaminho", não branco puro ──
+   Só os tokens mudam. Nenhum componente sabe que o tema existe.
+
+   As cores escurecem bastante aqui: o mesmo oliva que brilha sobre
+   marrom sumiria sobre papel. O que se mantém é o matiz, para a
+   identidade continuar a mesma nos dois temas. */
+:root[data-theme="light"] {
+  --fin-bg: #F3EFE4;
+  --fin-bg-2: #EBE5D6;
+  --fin-bg-3: #E1DAC7;
+  --fin-surface: #FBF8F1;
+
+  --fin-border: rgba(35, 31, 24, 0.11);
+  --fin-border-mid: rgba(35, 31, 24, 0.22);
+
+  --fin-text: #231F18;
+  --fin-muted: #6C6455;
+
+  --fin-accent: #556B18;
+  --fin-accent-dim: rgba(85, 107, 24, 0.11);
+  --fin-accent-mid: rgba(85, 107, 24, 0.30);
+  --fin-accent-ink: #FBF8F1;
+
+  --fin-in: #556B18;
+  --fin-in-soft: rgba(85, 107, 24, 0.13);
+  --fin-out: #A54A26;
+  --fin-out-soft: rgba(165, 74, 38, 0.12);
+  --fin-warn: #8A6A10;
+  --fin-warn-soft: rgba(138, 106, 16, 0.14);
+  --fin-danger: #96301F;
+  --fin-danger-soft: rgba(150, 48, 31, 0.12);
+
+  --fin-cat-1: #A54A26;
+  --fin-cat-2: #A87D18;
+  --fin-cat-3: #556B18;
+  --fin-cat-4: #376B3E;
+  --fin-cat-5: #7C3E55;
+  --fin-cat-6: #4B5560;
+
+  --fin-shadow: 0 10px 30px rgba(35, 31, 24, 0.12);
+
+  color-scheme: light;
+}

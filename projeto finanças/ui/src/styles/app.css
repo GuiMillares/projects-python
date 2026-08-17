@@ -1,0 +1,1708 @@
+/* ============================================================
+   FINANÇAS: Layout e componentes
+   Mobile first. Cor SEMPRE via var(--fin-*) (ver tokens.css).
+   ============================================================ */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  font-family: var(--fin-font);
+  background: var(--fin-bg);
+  color: var(--fin-text);
+  font-size: 13px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Desktop é o app: nada de selecionar/arrastar texto à toa nas cascas.
+   O conteúdo (.fin-content) volta a ser selecionável logo abaixo. */
+.fin-shell {
+  user-select: none;
+}
+
+.fin-content,
+input,
+textarea {
+  user-select: text;
+}
+
+/* Números alinham em coluna: tabular-nums evita o "pulo" de dígito. */
+.fin-num {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+
+/* ── Spinner ───────────────────────────────────────────────── */
+.fin-spin {
+  animation: fin-spin 0.8s linear infinite;
+}
+
+@keyframes fin-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.fin-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  padding: 56px 16px;
+  color: var(--fin-muted);
+  font-size: 12.5px;
+}
+
+/* ── Botões ────────────────────────────────────────────────── */
+.fin-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: var(--fin-radius);
+  font-size: 12.5px;
+  font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: background var(--fin-transition), border-color var(--fin-transition),
+    color var(--fin-transition);
+}
+
+.fin-btn--primary {
+  background: var(--fin-accent);
+  color: var(--fin-accent-ink);
+  border-color: var(--fin-accent);
+  font-weight: 600;
+}
+
+/* Hover inverte o botão: o preenchimento sai e sobram borda e texto na
+   cor do acento. A borda de 1px já existe no estado normal (só que da
+   mesma cor do fundo), então nada muda de tamanho e o texto não dança. */
+.fin-btn--primary:hover:not(:disabled) {
+  background: transparent;
+  color: var(--fin-accent);
+  border-color: var(--fin-accent);
+}
+
+.fin-btn--outline {
+  background: transparent;
+  color: var(--fin-accent);
+  border-color: var(--fin-accent-mid);
+}
+
+.fin-btn--outline:hover:not(:disabled) {
+  background: var(--fin-accent-dim);
+  border-color: var(--fin-accent);
+}
+
+.fin-btn--ghost {
+  background: transparent;
+  color: var(--fin-muted);
+  border-color: var(--fin-border);
+}
+
+.fin-btn--ghost:hover:not(:disabled) {
+  background: var(--fin-bg-3);
+  color: var(--fin-text);
+}
+
+.fin-btn--danger {
+  background: var(--fin-danger-soft);
+  color: var(--fin-danger);
+  border-color: var(--fin-danger-soft);
+}
+
+.fin-btn--danger:hover:not(:disabled) {
+  background: transparent;
+  border-color: var(--fin-danger);
+}
+
+.fin-btn--sm {
+  padding: 5px 10px;
+  font-size: 11.5px;
+}
+
+.fin-btn--block {
+  width: 100%;
+}
+
+.fin-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.fin-btn:focus-visible,
+.fin-icon-btn:focus-visible,
+.fin-nav-item:focus-visible,
+.fin-bottomnav__item:focus-visible {
+  outline: 2px solid var(--fin-accent);
+  outline-offset: 2px;
+}
+
+.fin-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--fin-radius);
+  border: 1px solid var(--fin-border);
+  background: transparent;
+  color: var(--fin-muted);
+  cursor: pointer;
+  transition: color var(--fin-transition), border-color var(--fin-transition),
+    background var(--fin-transition);
+}
+
+.fin-icon-btn:hover {
+  color: var(--fin-text);
+  border-color: var(--fin-border-mid);
+  background: var(--fin-bg-3);
+}
+
+/* ── Formulários ───────────────────────────────────────────── */
+.fin-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.fin-field > label {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--fin-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+}
+
+.fin-field input,
+.fin-field select {
+  background: var(--fin-bg-3);
+  border: 1px solid var(--fin-border);
+  border-radius: var(--fin-radius);
+  padding: 9px 11px;
+  font-size: 13px;
+  font-family: inherit;
+  color: var(--fin-text);
+  width: 100%;
+  outline: none;
+  transition: border-color var(--fin-transition), box-shadow var(--fin-transition);
+}
+
+.fin-field input:focus,
+.fin-field select:focus {
+  border-color: var(--fin-accent);
+  box-shadow: 0 0 0 3px var(--fin-accent-dim);
+}
+
+.fin-field input:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.fin-field__hint {
+  font-size: 11px;
+  color: var(--fin-muted);
+}
+
+.fin-pwd {
+  position: relative;
+}
+
+.fin-pwd input {
+  padding-right: 38px;
+}
+
+.fin-pwd__toggle {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--fin-muted);
+  display: flex;
+  padding: 4px;
+}
+
+.fin-pwd__toggle:hover {
+  color: var(--fin-text);
+}
+
+.fin-alert {
+  border-radius: var(--fin-radius);
+  padding: 9px 12px;
+  font-size: 12px;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.fin-alert--error {
+  background: var(--fin-danger-soft);
+  border: 1px solid var(--fin-danger);
+  color: var(--fin-danger);
+}
+
+.fin-alert svg {
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+/* ── Toast ─────────────────────────────────────────────────── */
+.fin-toast {
+  position: fixed;
+  left: 50%;
+  bottom: calc(var(--fin-bottomnav-h) + 16px);
+  transform: translateX(-50%);
+  z-index: 900;
+  background: var(--fin-surface);
+  border: 1px solid var(--fin-border-mid);
+  border-left-width: 3px;
+  border-radius: var(--fin-radius);
+  padding: 9px 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  color: var(--fin-text);
+  box-shadow: var(--fin-shadow);
+  max-width: calc(100vw - 32px);
+  animation: fin-toast-in 0.18s ease-out both;
+}
+
+@keyframes fin-toast-in {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(8px);
+  }
+}
+
+.fin-toast--success {
+  border-left-color: var(--fin-accent);
+  color: var(--fin-text);
+}
+
+.fin-toast--error {
+  border-left-color: var(--fin-danger);
+}
+
+@media (min-width: 900px) {
+  .fin-toast {
+    bottom: 20px;
+  }
+}
+
+/* ============================================================
+   LOGIN
+   ============================================================ */
+.fin-login {
+  min-height: 100vh;
+  display: flex;
+  background: var(--fin-bg);
+}
+
+/* Painel esquerdo, só desktop. */
+.fin-login__aside {
+  display: none;
+}
+
+@media (min-width: 860px) {
+  .fin-login__aside {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    justify-content: space-between;
+    padding: 44px;
+    background: var(--fin-bg-2);
+    border-right: 1px solid var(--fin-border);
+    position: relative;
+    overflow: hidden;
+  }
+
+  /* Coluna de leitura centrada: sem isto o conteúdo fica colado à
+     esquerda de um painel de 1000px e a tela parece vazia. */
+  .fin-login__aside > * {
+    width: 100%;
+    max-width: 430px;
+    margin-inline: auto;
+  }
+}
+
+.fin-login__mark {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--fin-muted);
+}
+
+.fin-login__mark svg {
+  color: var(--fin-accent);
+}
+
+.fin-login__headline {
+  font-size: clamp(1.7rem, 3vw, 2.3rem);
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  line-height: 1.18;
+  max-width: 15ch;
+}
+
+.fin-login__headline em {
+  font-style: normal;
+  color: var(--fin-accent);
+}
+
+.fin-login__sub {
+  font-size: 12.5px;
+  color: var(--fin-muted);
+  max-width: 34ch;
+  margin-top: 14px;
+  line-height: 1.65;
+}
+
+/* Marca-d'água: um extrato estilizado. Não é decoração aleatória:
+   são barras de entrada/saída, o mesmo vocabulário do dashboard. */
+.fin-login__ledger {
+  display: flex;
+  align-items: flex-end;
+  gap: 7px;
+  height: 88px;
+  opacity: 0.5;
+}
+
+.fin-login__ledger i {
+  display: block;
+  width: 12px;
+  border-radius: 2px 2px 0 0;
+  background: var(--fin-border-mid);
+}
+
+.fin-login__ledger i.up {
+  background: var(--fin-accent);
+  opacity: 0.55;
+}
+
+.fin-login__ledger i.down {
+  background: var(--fin-out);
+  opacity: 0.55;
+}
+
+/* Painel direito, o formulário. */
+.fin-login__panel {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  width: 100%;
+  padding: 32px 20px calc(32px + env(safe-area-inset-bottom));
+}
+
+@media (min-width: 860px) {
+  .fin-login__panel {
+    width: 424px;
+    flex-shrink: 0;
+    padding: 48px 44px;
+  }
+}
+
+.fin-login__form-wrap {
+  width: 100%;
+  max-width: 352px;
+  margin: 0 auto;
+}
+
+.fin-login__brand-mobile {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-bottom: 36px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--fin-muted);
+}
+
+.fin-login__brand-mobile svg {
+  color: var(--fin-accent);
+}
+
+@media (min-width: 860px) {
+  .fin-login__brand-mobile {
+    display: none;
+  }
+}
+
+.fin-login__title {
+  font-size: 1.45rem;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  margin-bottom: 5px;
+}
+
+.fin-login__hint {
+  font-size: 12.5px;
+  color: var(--fin-muted);
+  margin-bottom: 24px;
+  line-height: 1.6;
+}
+
+.fin-login__form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.fin-login__step-head {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  margin-bottom: 14px;
+}
+
+.fin-login__step-badge {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--fin-radius);
+  background: var(--fin-accent-dim);
+  border: 1px solid var(--fin-accent-mid);
+  color: var(--fin-accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+/* Código de 6 dígitos: mono + tracking largo, para conferir a olho. */
+.fin-otp-input {
+  text-align: center;
+  font-family: var(--fin-font-num);
+  font-size: 1.35rem;
+  font-weight: 600;
+  letter-spacing: 0.34em;
+  text-indent: 0.34em;
+}
+
+.fin-qr {
+  display: block;
+  margin: 0 auto;
+  width: 168px;
+  height: 168px;
+  border-radius: var(--fin-radius);
+  /* Fundo claro fixo: QR code precisa de quiet zone branca para ler
+     no tema escuro também. Aqui o branco é funcional, não estético. */
+  background: #fff;
+  padding: 8px;
+  border: 1px solid var(--fin-border-mid);
+}
+
+/* ============================================================
+   SHELL (sidebar + topbar + bottom nav)
+   ============================================================ */
+.fin-shell {
+  display: flex;
+  min-height: 100vh;
+}
+
+/* ── Sidebar: some no mobile, vira bottom nav ── */
+.fin-sidebar {
+  display: none;
+}
+
+@media (min-width: 900px) {
+  .fin-sidebar {
+    display: flex;
+    flex-direction: column;
+    width: var(--fin-sidebar-w);
+    flex-shrink: 0;
+    background: var(--fin-bg-2);
+    border-right: 1px solid var(--fin-border);
+    position: sticky;
+    top: 0;
+    height: 100vh;
+  }
+}
+
+.fin-sidebar__brand {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 0 16px;
+  height: var(--fin-topbar-h);
+  border-bottom: 1px solid var(--fin-border);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--fin-muted);
+  flex-shrink: 0;
+}
+
+.fin-sidebar__brand svg {
+  color: var(--fin-accent);
+}
+
+.fin-sidebar__nav {
+  flex: 1;
+  padding: 12px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow-y: auto;
+}
+
+.fin-sidebar__group {
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--fin-muted);
+  opacity: 0.7;
+  padding: 14px 12px 6px;
+}
+
+.fin-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: var(--fin-radius);
+  font-size: 12.5px;
+  color: var(--fin-muted);
+  text-decoration: none;
+  border: none;
+  background: transparent;
+  font-family: inherit;
+  cursor: pointer;
+  width: 100%;
+  text-align: left;
+  position: relative;
+  transition: background var(--fin-transition), color var(--fin-transition);
+}
+
+.fin-nav-item svg {
+  flex-shrink: 0;
+}
+
+.fin-nav-item:hover {
+  background: var(--fin-bg-3);
+  color: var(--fin-text);
+}
+
+.fin-nav-item.active {
+  background: var(--fin-accent-dim);
+  color: var(--fin-accent);
+  font-weight: 600;
+}
+
+/* Régua no item ativo, a mesma linguagem da barrinha do KPI. */
+.fin-nav-item.active::before {
+  content: "";
+  position: absolute;
+  left: -10px;
+  top: 5px;
+  bottom: 5px;
+  width: 2px;
+  background: var(--fin-accent);
+  border-radius: 0 2px 2px 0;
+}
+
+.fin-nav-item--exit:hover {
+  background: var(--fin-danger-soft);
+  color: var(--fin-danger);
+}
+
+.fin-sidebar__foot {
+  padding: 10px;
+  border-top: 1px solid var(--fin-border);
+}
+
+/* ── Main ── */
+.fin-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.fin-topbar {
+  height: var(--fin-topbar-h);
+  background: var(--fin-bg-2);
+  border-bottom: 1px solid var(--fin-border);
+  padding: 0 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  position: sticky;
+  top: 0;
+  z-index: 60;
+}
+
+.fin-topbar__title {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--fin-muted);
+  min-width: 0;
+}
+
+.fin-topbar__title svg {
+  color: var(--fin-accent);
+  flex-shrink: 0;
+}
+
+@media (min-width: 900px) {
+  /* No desktop a marca já está na sidebar, aqui vira o nome da página. */
+  .fin-topbar__title {
+    letter-spacing: 0.1em;
+  }
+
+  .fin-topbar__title svg {
+    display: none;
+  }
+}
+
+.fin-topbar__right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.fin-avatar-btn {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 1px solid var(--fin-accent-mid);
+  background: var(--fin-accent-dim);
+  color: var(--fin-accent);
+  font-size: 11px;
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+/* object-fit: cover é o que impede a foto de esticar dentro do círculo
+   quando o recorte quadrado, por algum motivo, não for exato. */
+.fin-avatar-btn img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.fin-avatar-btn--estatico {
+  width: 34px;
+  height: 34px;
+  cursor: default;
+}
+
+.fin-menu-wrap {
+  position: relative;
+}
+
+.fin-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 7px);
+  min-width: 208px;
+  background: var(--fin-surface);
+  border: 1px solid var(--fin-border-mid);
+  border-radius: var(--fin-radius);
+  box-shadow: var(--fin-shadow);
+  padding: 5px;
+  z-index: 80;
+}
+
+.fin-menu__head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--fin-border);
+  margin-bottom: 5px;
+}
+
+.fin-menu__name {
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.fin-menu__mail {
+  font-size: 11px;
+  color: var(--fin-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.fin-menu__item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  background: none;
+  border-radius: var(--fin-radius);
+  color: var(--fin-text);
+  font-size: 12.5px;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.fin-menu__item:hover {
+  background: var(--fin-bg-3);
+}
+
+.fin-menu__item--exit {
+  color: var(--fin-danger);
+}
+
+.fin-menu__item--exit:hover {
+  background: var(--fin-danger-soft);
+}
+
+.fin-content {
+  flex: 1;
+  padding: 16px 14px calc(var(--fin-bottomnav-h) + 24px + env(safe-area-inset-bottom));
+  max-width: 1280px;
+  width: 100%;
+}
+
+@media (min-width: 900px) {
+  .fin-content {
+    padding: 22px 24px 40px;
+  }
+}
+
+/* ── Bottom nav (mobile) ──
+   Substitui a sidebar em telas pequenas. Fixa, com safe-area do iOS. */
+.fin-bottomnav {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 70;
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  background: var(--fin-bg-2);
+  border-top: 1px solid var(--fin-border);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+@media (min-width: 900px) {
+  .fin-bottomnav {
+    display: none;
+  }
+}
+
+.fin-bottomnav__item {
+  height: var(--fin-bottomnav-h);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  border: none;
+  background: none;
+  font-family: inherit;
+  font-size: 9.5px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  color: var(--fin-muted);
+  text-decoration: none;
+  cursor: pointer;
+  position: relative;
+}
+
+.fin-bottomnav__item.active {
+  color: var(--fin-accent);
+}
+
+/* Marca do item ativo no topo da barra (espelha a régua da sidebar). */
+.fin-bottomnav__item.active::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 26%;
+  right: 26%;
+  height: 2px;
+  background: var(--fin-accent);
+  border-radius: 0 0 2px 2px;
+}
+
+/* ============================================================
+   PÁGINA
+   ============================================================ */
+.fin-page-head {
+  margin-bottom: 16px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.fin-page-title {
+  font-size: 1.15rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.fin-page-sub {
+  font-size: 12px;
+  color: var(--fin-muted);
+  margin-top: 2px;
+}
+
+/* min-width: 0 anula o mínimo automático de item de grid/flex. Sem isso o
+   card não encolhe abaixo do próprio conteúdo, estoura a trilha e a página
+   ganha rolagem lateral em tela estreita. */
+.fin-card {
+  background: var(--fin-surface);
+  border: 1px solid var(--fin-border);
+  border-radius: var(--fin-radius-lg);
+  padding: 15px;
+  min-width: 0;
+}
+
+.fin-card--flush {
+  padding: 0;
+  overflow: hidden;
+}
+
+.fin-card__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+
+.fin-card--flush .fin-card__head {
+  padding: 14px 15px 10px;
+  margin-bottom: 0;
+}
+
+.fin-card__title {
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.fin-card__sub {
+  font-size: 11.5px;
+  color: var(--fin-muted);
+  margin-top: 1px;
+}
+
+.fin-card__aside {
+  text-align: right;
+}
+
+.fin-card__aside-val {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.fin-card__aside-lbl {
+  font-size: 10.5px;
+  color: var(--fin-muted);
+}
+
+/* ── KPIs ── */
+.fin-kpis {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px;
+  margin-bottom: 14px;
+}
+
+@media (min-width: 900px) {
+  .fin-kpis {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 11px;
+  }
+}
+
+.fin-kpi {
+  background: var(--fin-surface);
+  border: 1px solid var(--fin-border);
+  border-radius: var(--fin-radius-lg);
+  padding: 13px 14px;
+  position: relative;
+  overflow: hidden;
+  transition: border-color var(--fin-transition);
+}
+
+.fin-kpi:hover {
+  border-color: var(--fin-border-mid);
+}
+
+.fin-kpi__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 9px;
+  color: var(--kc, var(--fin-accent));
+}
+
+.fin-kpi__label {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--fin-muted);
+}
+
+/* Valor monetário NUNCA quebra no meio: "R$ 51.400,0 / 5" em duas linhas
+   é ilegível e ainda parece outro número. Se faltar espaço, o texto é
+   cortado com reticências, e o valor cheio continua no tooltip/lista. */
+.fin-kpi__val {
+  font-family: var(--fin-font-num);
+  font-variant-numeric: tabular-nums;
+  font-size: 1.18rem;
+  font-weight: 700;
+  letter-spacing: -0.04em;
+  line-height: 1.15;
+  margin-bottom: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@media (min-width: 420px) {
+  .fin-kpi__val {
+    font-size: 1.34rem;
+  }
+}
+
+@media (min-width: 900px) {
+  .fin-kpi__val {
+    font-size: 1.6rem;
+  }
+}
+
+.fin-kpi__val--tinted {
+  color: var(--kc, var(--fin-text));
+}
+
+.fin-kpi__sub {
+  font-size: 11px;
+  color: var(--fin-muted);
+}
+
+/* Barrinha lateral colorida: a cor vem do --kc setado inline. */
+.fin-kpi__bar {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 2.5px;
+  background: var(--kc, var(--fin-accent));
+  opacity: 0.5;
+  transition: opacity var(--fin-transition);
+}
+
+.fin-kpi:hover .fin-kpi__bar {
+  opacity: 1;
+}
+
+/* ── Grades do dashboard ── */
+.fin-grid-2 {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+@media (min-width: 900px) {
+  .fin-grid-2 {
+    grid-template-columns: minmax(0, 1fr) 320px;
+  }
+}
+
+.fin-grid-2--even {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+@media (min-width: 900px) {
+  .fin-grid-2--even {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* ── Lista de atenção ── */
+.fin-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.fin-list__item {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 10px 15px;
+  border-top: 1px solid var(--fin-border);
+  transition: background var(--fin-transition);
+}
+
+.fin-list__item:hover {
+  background: var(--fin-bg-3);
+}
+
+.fin-list__ico {
+  width: 29px;
+  height: 29px;
+  border-radius: var(--fin-radius);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: var(--ic, var(--fin-muted));
+  background: color-mix(in srgb, var(--ic, var(--fin-muted)) 14%, transparent);
+}
+
+.fin-list__body {
+  flex: 1;
+  min-width: 0;
+}
+
+.fin-list__name {
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.fin-list__meta {
+  font-size: 11px;
+  color: var(--fin-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.fin-list__val {
+  font-family: var(--fin-font-num);
+  font-variant-numeric: tabular-nums;
+  font-size: 12.5px;
+  font-weight: 600;
+  text-align: right;
+  flex-shrink: 0;
+  color: var(--ic, var(--fin-text));
+}
+
+.fin-list__val small {
+  display: block;
+  font-family: var(--fin-font);
+  font-size: 10px;
+  font-weight: 400;
+  color: var(--fin-muted);
+}
+
+/* ── Estado vazio ── */
+.fin-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 34px 16px;
+  text-align: center;
+  color: var(--fin-muted);
+  font-size: 12px;
+}
+
+.fin-empty svg {
+  opacity: 0.4;
+}
+
+/* ── Banner de alerta ── */
+.fin-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 13px;
+  border-radius: var(--fin-radius-lg);
+  border: 1px solid var(--bc, var(--fin-warn));
+  background: color-mix(in srgb, var(--bc, var(--fin-warn)) 10%, transparent);
+  color: var(--bc, var(--fin-warn));
+  font-size: 12.5px;
+  margin-bottom: 12px;
+}
+
+.fin-banner svg {
+  flex-shrink: 0;
+}
+
+.fin-banner strong {
+  font-weight: 600;
+}
+
+/* ── Segmented (filtros) ── */
+.fin-seg {
+  display: inline-flex;
+  border: 1px solid var(--fin-border);
+  border-radius: var(--fin-radius);
+  overflow: hidden;
+}
+
+.fin-seg button {
+  border: none;
+  background: transparent;
+  color: var(--fin-muted);
+  font-family: inherit;
+  font-size: 11.5px;
+  padding: 5px 11px;
+  cursor: pointer;
+  transition: background var(--fin-transition), color var(--fin-transition);
+}
+
+.fin-seg button + button {
+  border-left: 1px solid var(--fin-border);
+}
+
+.fin-seg button:hover {
+  color: var(--fin-text);
+}
+
+.fin-seg button.active {
+  background: var(--fin-accent-dim);
+  color: var(--fin-accent);
+  font-weight: 600;
+}
+
+/* ============================================================
+   CONFIGURAÇÕES
+   ============================================================ */
+/* Duas colunas montadas à mão, não pelo fluxo automático do grid.
+   Com `grid-auto-flow` os cards entram linha a linha e a altura de cada
+   linha é a do card mais alto dela, o que abria um vão embaixo do card
+   curto. Aqui cada coluna é um flex vertical e se fecha na própria
+   altura. */
+.fin-cfg-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+}
+
+.fin-cfg-col {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+@media (min-width: 900px) {
+  .fin-cfg-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  /* Orçamento é uma tabela: ocupa a linha inteira embaixo das colunas. */
+  .fin-cfg-largo {
+    grid-column: 1 / -1;
+  }
+}
+
+.fin-cfg-card__title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  font-weight: 600;
+  padding-bottom: 11px;
+  margin-bottom: 13px;
+  border-bottom: 1px solid var(--fin-border);
+}
+
+.fin-cfg-card__title svg {
+  color: var(--fin-accent);
+}
+
+.fin-form {
+  display: flex;
+  flex-direction: column;
+  gap: 13px;
+}
+
+.fin-form__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 13px;
+}
+
+@media (min-width: 480px) {
+  .fin-form__row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.fin-form__actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* ============================================================
+   LANÇAMENTOS (Entradas e Saídas)
+   ============================================================ */
+
+/* Formulário: quantos campos couberem por linha, sem breakpoint fixo.
+   auto-fit + minmax faz o navegador decidir, e a mesma regra serve o
+   formulário de 5 campos dos lançamentos e o de 4 dos investimentos. */
+.fin-lanc-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 190px), 1fr));
+  gap: 13px;
+}
+
+.fin-select-mes {
+  background: var(--fin-bg-3);
+  border: 1px solid var(--fin-border);
+  border-radius: var(--fin-radius);
+  color: var(--fin-text);
+  font-family: inherit;
+  font-size: 12px;
+  padding: 5px 9px;
+  outline: none;
+  cursor: pointer;
+}
+
+.fin-select-mes:focus {
+  border-color: var(--fin-accent);
+  box-shadow: 0 0 0 3px var(--fin-accent-dim);
+}
+
+.fin-lanc-lista {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Mobile: data e valor na mesma faixa do nome, botão à direita.
+   A data vira a primeira coluna só a partir de 640px, quando sobra
+   largura para ela sem espremer a descrição. */
+.fin-lanc-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-areas: "info valor excluir";
+  align-items: center;
+  gap: 6px 10px;
+  padding: 10px 15px;
+  border-top: 1px solid var(--fin-border);
+  transition: background var(--fin-transition);
+}
+
+.fin-lanc-item:hover {
+  background: var(--fin-bg-3);
+}
+
+.fin-lanc-item__data {
+  grid-area: data;
+  font-family: var(--fin-font-num);
+  font-variant-numeric: tabular-nums;
+  font-size: 11.5px;
+  color: var(--fin-muted);
+  white-space: nowrap;
+}
+
+.fin-lanc-item__info {
+  grid-area: info;
+  min-width: 0;
+}
+
+.fin-lanc-item__nome {
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.fin-lanc-item__meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--fin-muted);
+  min-width: 0;
+}
+
+.fin-lanc-item__ponto {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.fin-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 6px;
+  border-radius: 20px;
+  border: 1px solid var(--fin-border-mid);
+  font-size: 10px;
+  color: var(--fin-muted);
+  white-space: nowrap;
+}
+
+.fin-lanc-item__valor {
+  grid-area: valor;
+  font-family: var(--fin-font-num);
+  font-variant-numeric: tabular-nums;
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+  text-align: right;
+}
+
+.fin-lanc-item__excluir {
+  grid-area: excluir;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  border: 1px solid transparent;
+  border-radius: var(--fin-radius);
+  background: none;
+  color: var(--fin-muted);
+  cursor: pointer;
+  transition: color var(--fin-transition), border-color var(--fin-transition),
+    background var(--fin-transition);
+}
+
+.fin-lanc-item__excluir:hover:not(:disabled) {
+  color: var(--fin-danger);
+  border-color: var(--fin-danger);
+  background: var(--fin-danger-soft);
+}
+
+.fin-lanc-item__excluir:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+@media (min-width: 640px) {
+  .fin-lanc-item {
+    grid-template-columns: auto minmax(0, 1fr) auto auto;
+    grid-template-areas: "data info valor excluir";
+  }
+}
+
+/* 3 KPIs: em telas largas viram 3 colunas em vez de 4 com um buraco. */
+@media (min-width: 900px) {
+  .fin-kpis--3 {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+/* ============================================================
+   CARTEIRA (Investimentos)
+   ============================================================ */
+
+.fin-carteira {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Mobile: cada posição é um cartão empilhado, e cada célula ganha o
+   próprio rótulo via data-rotulo (o cabeçalho da tabela some).
+   Tabela de 6 colunas em 390px não tem como ser lida. */
+.fin-carteira__cab {
+  display: none;
+}
+
+.fin-carteira__linha {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px 12px;
+  padding: 12px 15px;
+  border-top: 1px solid var(--fin-border);
+  transition: background var(--fin-transition);
+}
+
+.fin-carteira__linha:hover {
+  background: var(--fin-bg-3);
+}
+
+.fin-carteira__ativo {
+  min-width: 0;
+}
+
+/* O botão de excluir é reaproveitado dos lançamentos, e de lá ele traz
+   `grid-area: excluir`. Essa área não existe na grade da carteira, então
+   o navegador criava uma linha implícita só para ele e a altura da
+   posição dobrava. Voltar para `auto` o coloca na coluna seguinte. */
+.fin-carteira__linha .fin-lanc-item__excluir {
+  grid-area: auto;
+  align-self: center;
+}
+
+.fin-carteira__ticker {
+  font-family: var(--fin-font-num);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.fin-carteira__nome {
+  font-size: 11px;
+  color: var(--fin-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.fin-carteira__cel {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  font-size: 12.5px;
+  min-width: 0;
+}
+
+.fin-carteira__cel small {
+  font-size: 10.5px;
+  color: var(--fin-muted);
+  white-space: nowrap;
+}
+
+.fin-carteira__sem {
+  color: var(--fin-muted);
+  font-style: italic;
+  font-size: 11.5px;
+}
+
+.fin-carteira__cel::before {
+  content: attr(data-rotulo);
+  font-size: 9.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--fin-muted);
+  opacity: 0.75;
+}
+
+@media (max-width: 899px) {
+  /* As quatro células ocupam a largura inteira em duas colunas, abaixo
+     do ticker. O botão de excluir fica ancorado no canto superior. */
+  .fin-carteira__ativo {
+    grid-column: 1;
+  }
+
+  .fin-carteira__linha > .fin-lanc-item__excluir {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .fin-carteira__cel {
+    grid-column: span 1;
+  }
+
+  .fin-carteira__linha {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  }
+
+  .fin-carteira__ativo {
+    grid-column: 1 / span 2;
+  }
+}
+
+@media (min-width: 900px) {
+  .fin-carteira__cab,
+  .fin-carteira__linha {
+    display: grid;
+    grid-template-columns: minmax(0, 1.4fr) repeat(4, minmax(0, 1fr)) 36px;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .fin-carteira__cab {
+    padding: 0 15px 8px;
+    font-size: 9.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--fin-muted);
+    opacity: 0.75;
+  }
+
+  /* No desktop o cabeçalho da tabela já nomeia a coluna. */
+  .fin-carteira__cel::before {
+    content: none;
+  }
+
+  .fin-carteira__cel {
+    align-items: flex-end;
+    text-align: right;
+  }
+
+  .fin-carteira__cab span:not(:first-child) {
+    text-align: right;
+  }
+}
+
+/* Foto de perfil */
+.fin-foto-row {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  flex-wrap: wrap;
+}
+
+.fin-foto {
+  width: 76px;
+  height: 76px;
+  border-radius: 50%;
+  border: 1px solid var(--fin-accent-mid);
+  background: var(--fin-accent-dim);
+  color: var(--fin-accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  font-weight: 700;
+  flex-shrink: 0;
+  overflow: hidden;
+  position: relative;
+}
+
+.fin-foto img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.fin-foto__carregando {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--fin-surface);
+  color: var(--fin-accent);
+}
+
+.fin-foto-acoes {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  align-items: flex-start;
+  min-width: 0;
+}
+
+/* Estado do 2FA */
+.fin-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 9px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 600;
+  border: 1px solid var(--pc, var(--fin-muted));
+  color: var(--pc, var(--fin-muted));
+  background: color-mix(in srgb, var(--pc, var(--fin-muted)) 12%, transparent);
+}
+
+/* Orçamentos por categoria */
+.fin-budget-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 0;
+  border-top: 1px solid var(--fin-border);
+}
+
+.fin-budget-row:first-of-type {
+  border-top: none;
+}
+
+.fin-budget-row__dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  flex-shrink: 0;
+  background: var(--dc, var(--fin-muted));
+}
+
+.fin-budget-row__name {
+  flex: 1;
+  min-width: 0;
+  font-size: 12.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.fin-budget-row input {
+  width: 108px;
+  flex-shrink: 0;
+  background: var(--fin-bg-3);
+  border: 1px solid var(--fin-border);
+  border-radius: var(--fin-radius);
+  padding: 6px 9px;
+  font-family: var(--fin-font-num);
+  font-variant-numeric: tabular-nums;
+  font-size: 12.5px;
+  color: var(--fin-text);
+  outline: none;
+  text-align: right;
+}
+
+.fin-budget-row input:focus {
+  border-color: var(--fin-accent);
+  box-shadow: 0 0 0 3px var(--fin-accent-dim);
+}
+
+/* Reduz movimento quando o sistema pede. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

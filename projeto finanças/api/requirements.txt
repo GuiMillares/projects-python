@@ -1,0 +1,6 @@
+# Tudo pure-Python: instala sem compilador no Windows/Python 3.14.
+# O hash de senha usa hashlib.scrypt, que já vem na biblioteca padrão:
+# uma dependência a menos e nada de bcrypt com build quebrado.
+Flask==3.1.0
+PyMySQL==1.1.1
+pyotp==2.9.0

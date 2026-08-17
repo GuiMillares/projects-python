@@ -1,0 +1,195 @@
+/* Interatividade dos gráficos. Cores só via var(--fin-*). */
+
+.fin-chart {
+  position: relative;
+  width: 100%;
+  min-width: 0;
+}
+
+/* O SVG é desenhado na largura medida do container. `max-width: 100%`
+   é a trava contra o impasse: ao encolher a janela, o SVG ainda tem a
+   largura antiga por um quadro, e sem isso ele seguraria o container
+   aberto, que é justamente o que o ResizeObserver está medindo. */
+.fin-chart svg {
+  display: block;
+  max-width: 100%;
+  overflow: visible;
+}
+
+.fin-chart-cross {
+  pointer-events: none;
+}
+
+/* Grupo de barras: os não-focados recuam em vez de o focado "acender". */
+.fin-bar-g rect {
+  transition: opacity var(--fin-transition);
+}
+
+.fin-chart svg.has-hover .fin-bar-g:not(.is-hover) rect {
+  opacity: 0.35;
+}
+
+/* ── Tooltip ── */
+.fin-chart-tip {
+  position: absolute;
+  pointer-events: none;
+  transform: translate(-50%, calc(-100% - 10px));
+  background: var(--fin-surface);
+  border: 1px solid var(--fin-border-mid);
+  border-radius: var(--fin-radius);
+  padding: 6px 10px;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--fin-text);
+  box-shadow: var(--fin-shadow);
+  white-space: nowrap;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  animation: fin-tip-in 0.12s ease;
+}
+
+@keyframes fin-tip-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, calc(-100% - 4px));
+  }
+}
+
+.fin-chart-tip__lbl {
+  color: var(--fin-muted);
+  font-size: 10.5px;
+  text-transform: capitalize;
+}
+
+.fin-chart-tip__row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-variant-numeric: tabular-nums;
+}
+
+.fin-chart-tip__row i {
+  width: 7px;
+  height: 7px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+/* ── Rosca ── */
+.fin-donut {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.fin-donut__seg {
+  transition: opacity var(--fin-transition), stroke-width var(--fin-transition);
+  cursor: pointer;
+}
+
+.fin-donut__leg {
+  flex: 1;
+  min-width: 148px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.fin-donut__leg-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px;
+  margin: 0 -6px;
+  border: none;
+  border-radius: var(--fin-radius);
+  background: none;
+  color: var(--fin-text);
+  font-family: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  text-align: left;
+  transition: background var(--fin-transition), opacity var(--fin-transition);
+}
+
+.fin-donut__leg-item:hover {
+  background: var(--fin-bg-3);
+}
+
+.fin-donut__leg-item.on {
+  background: var(--fin-bg-3);
+}
+
+.fin-donut__leg-item.off {
+  opacity: 0.4;
+}
+
+.fin-donut__leg-item i {
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.fin-donut__leg-name {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.fin-donut__leg-val {
+  color: var(--fin-muted);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+
+.fin-donut__clear {
+  margin-top: 5px;
+  background: none;
+  border: none;
+  color: var(--fin-muted);
+  font-family: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  padding: 2px 0;
+  text-align: left;
+}
+
+.fin-donut__clear:hover {
+  color: var(--fin-text);
+}
+
+/* ── Vazio ── */
+.fin-chart-empty {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.fin-chart-empty svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0.55;
+}
+
+.fin-chart-empty__label {
+  position: relative;
+  z-index: 2;
+  font-size: 11.5px;
+  color: var(--fin-muted);
+  background: var(--fin-surface);
+  padding: 4px 11px;
+  border-radius: var(--fin-radius);
+  border: 1px solid var(--fin-border);
+  text-align: center;
+  max-width: 88%;
+}
