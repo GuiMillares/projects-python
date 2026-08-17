@@ -1,29 +1,5 @@
-import sqlite3
-
-conexao = sqlite3.connect("financas.db")
-cursor = conexao.cursor()
+from banco import criar_tabela, inserir_transacao, calcular_resumo
 rodando = True
-
-def criar_tabela():
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS transacoes (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            data TEXT,
-            nome TEXT,
-            valor REAL,
-            natureza TEXT,
-            categoria TEXT,
-            recorrencia TEXT
-        )
-    """)
-    conexao.commit()
-
-def inserir_transacao(data, nome, valor, natureza, categoria, recorrencia):
-    cursor.execute(
-        "INSERT INTO transacoes (data, nome, valor, natureza, categoria, recorrencia) VALUES (?, ?, ?, ?, ?, ?)",
-        (data, nome, valor, natureza, categoria, recorrencia)
-    )
-    conexao.commit()
 
 # Garante que a tabela exista antes de qualquer operação
 criar_tabela()
@@ -49,16 +25,36 @@ while rodando:
         resultado = cursor.fetchall()
 
         saldo = 0
+        receita_por_categoria = {}
+        despesa_por_categoria = {}
         for transacao in resultado:
             valor = transacao[3]
             natureza = transacao[4]
+            categoria = transacao[5]
 
             if natureza == "Receita":
                 saldo = saldo + valor
             elif natureza == "Despesa":
                 saldo = saldo - valor
+            
+            if categoria not in receita_por_categoria:
+                receita_por_categoria[categoria] = 0
+            if categoria not in despesa_por_categoria:
+                despesa_por_categoria[categoria] = 0
+            if natureza == "Receita":
+                receita_por_categoria[categoria] += valor
+            elif natureza == "Despesa":
+                despesa_por_categoria[categoria] -= valor
 
         print(f"Saldo atual: R$ {saldo}")
+        print("Receitas por categoria:")
+        for categoria, valor in receita_por_categoria.items():
+            if valor != 0:
+                print(f"{categoria}: R$ {valor}")
+        print("Despesas por categoria:")
+        for categoria, valor in despesa_por_categoria.items():
+            if valor != 0:
+                print(f"{categoria}: R$ {valor}")
 
     elif opcao == "3":
         print("Saindo...")

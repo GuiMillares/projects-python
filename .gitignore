@@ -1,0 +1,32 @@
+# ── Python ──────────────────────────────────────────────────
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# ── Node ────────────────────────────────────────────────────
+node_modules/
+dist/
+.vite/
+npm-debug.log*
+
+# ── Segredos e ambiente ─────────────────────────────────────
+# .env.example fica versionado; o .env real com o token da brapi, não.
+.env
+.env.local
+.env.*.local
+
+# ── Banco local ─────────────────────────────────────────────
+# financas.db é o SQLite antigo, com lançamentos reais. O MySQL do
+# Laragon vive fora do repositório de qualquer forma; quem recria a
+# estrutura é db/schema.sql.
+*.db
+*.sqlite3
+
+# ── Sistema e editor ────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+.idea/
+*.swp

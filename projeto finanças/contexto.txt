@@ -1,0 +1,213 @@
+CONTEXTO DO PROJETO: Painel financeiro pessoal
+==============================================
+Cole este arquivo no Claude Code de casa para retomar o trabalho.
+Última atualização: 17/08/2026
+
+
+1. O QUE É
+----------
+App de finanças pessoais de dono único. Front-end React (Vite) que no futuro
+roda como desktop nativo via Tauri, falando com uma API Python (Flask) local
+sobre o MySQL do Laragon.
+
+Repositório: git@github.com:GuiMillares/projects-python.git (branch main)
+O projeto fica na subpasta "projeto finanças/" do repositório.
+
+
+2. ESTRUTURA
+------------
+projeto finanças/
+  db/schema.sql        cria o banco local_finance do zero (idempotente)
+  db/migrar.sql        alterações em banco que já existe (idempotente)
+  api/                 API Flask
+    app.py             rotas
+    db.py              conexão MySQL (PyMySQL), sempre com parâmetro %s
+    seguranca.py       senha (scrypt), sessões e TOTP
+    cotacoes.py        cliente brapi.dev (cotação da B3)
+    config.py          tudo configurável por variável de ambiente
+    criar_usuario.py   CLI para criar/trocar senha do usuário
+    importar_sqlite.py traz o financas.db antigo para o MySQL
+  ui/                  React + Vite
+    src/pages/         Login, Dashboard, Lancamentos, Investimentos,
+                       Configuracoes, EmBreve
+    src/components/    AppLayout, Charts (SVG próprios)
+    src/services/      api, authService, financasService,
+                       investimentosService, perfilService, cores, imagem
+    src/styles/        tokens.css (TODA a cor), app.css (layout)
+  financas.py          CLI antiga em SQLite, origem dos dados a importar
+  README.md            instruções detalhadas
+
+
+3. COMO SUBIR
+-------------
+a) MySQL do Laragon (pelo painel do Laragon, ou):
+   C:/laragon/bin/mysql/mysql-8.4.3-winx64/bin/mysqld.exe \
+     --defaults-file=C:/laragon/bin/mysql/mysql-8.4.3-winx64/my.ini
+
+b) Banco, RODANDO DA RAIZ "projeto finanças/":
+   mysql -u root --skip-password < db/schema.sql
+   mysql -u root --skip-password < db/migrar.sql
+
+c) API (ATENÇÃO: ative o venv certo, ver seção 7):
+   cd api
+   source ../../.venv/Scripts/activate
+   pip install -r requirements.txt      # só na primeira vez
+   python criar_usuario.py              # só na primeira vez
+   python app.py                        # http://127.0.0.1:8756
+
+d) Telas:
+   cd ui
+   npm install
+   npm run dev                          # http://localhost:1420
+
+No primeiro acesso a tela pede o cadastro do 2FA e mostra o QR code.
+
+
+4. DECISÕES DE ARQUITETURA (não desfazer sem motivo)
+-----------------------------------------------------
+* NÃO usa Firebase. O projeto começou com Firebase Auth + Cloud Functions
+  (copiado do painel /superadmin do Synchro) e foi migrado para processo
+  local a pedido. O mapeamento foi:
+      Firebase Auth        -> senha com hashlib.scrypt em seguranca.py
+      Cloud Functions 2FA  -> rotas /api/auth/2fa/*
+      Documento Firestore  -> tabela usuarios
+
+* INVARIANTE DE SEGURANÇA: o segredo TOTP nunca existe no frontend. É
+  gerado no servidor, mora só em usuarios.totp_secret e nenhuma rota o
+  devolve. O cliente vê uma única vez o otpauth:// do cadastro (para virar
+  QR code) e depois só manda 6 dígitos e recebe sim ou não.
+  Se aparecer otplib ou speakeasy no ui/package.json, a regra foi quebrada.
+
+* Login devolve sessão PARCIAL: ela só abre as rotas de 2FA. Nenhum dado
+  financeiro sai antes do código ser validado.
+
+* Código TOTP vale UMA vez (janela queimada em usuarios.totp_ultimo_step),
+  não os 30 segundos inteiros.
+
+* Dinheiro é DECIMAL no MySQL, nunca FLOAT.
+
+* Toda query passa por parâmetro (%s), nunca por f-string.
+
+* A API escuta só em 127.0.0.1 e aceita uma lista fechada de origens CORS.
+
+* app.py checa a porta antes de subir e recusa se já houver algo lá. Isso
+  existe porque o Windows deixa DOIS processos escutarem a mesma porta
+  (SO_REUSEADDR), e as respostas passam a se revezar entre eles; quando um
+  é de antes de uma alteração, a API parece rodar código velho de forma
+  intermitente. Isso já causou confusão duas vezes.
+
+
+5. DESIGN (o dono é exigente com isso, ler antes de mexer)
+-----------------------------------------------------------
+Ele rejeita estética de "template gerado por IA". Regras concretas:
+
+* Paleta "Oliva & Terracota". Base neutra QUENTE (marrom-tinta no escuro,
+  pergaminho no claro) com acento OLIVA (#A8BD52 escuro, #556B18 claro).
+  PROIBIDO: ciano, azul e teal (é a cara do Synchro, projeto dele que ele
+  quer diferenciar) e roxo/indigo de template.
+* Entradas em oliva, saídas em terracota, alerta em ocre, ação urgente em
+  tijolo. Os quatro em matizes bem separados.
+* TODA cor vive em ui/src/styles/tokens.css. Nenhum componente tem cor
+  fixa. É o que faz o tema claro/escuro funcionar sem duplicar componente.
+  A única exceção documentada eram as amostras do seletor de tema, que já
+  foi removido.
+* Sem gradiente ou glassmorphism decorativo. Sem excesso de card com sombra
+  suave e canto muito arredondado.
+* Ícones lucide-react. NENHUM emoji na interface.
+* SEM TRAVESSÃO (o traço longo) em texto nenhum, nem em comentário. Pediu
+  explicitamente para tirar todos; use dois-pontos, vírgula ou ponto.
+* Gráficos são componentes SVG próprios em components/Charts.jsx. Não
+  adicionar biblioteca de gráfico.
+* Botão primário no hover INVERTE: fundo transparente, borda e texto na cor
+  do acento.
+* Responsivo com breakpoint em 900px: sidebar no desktop, bottom navigation
+  no mobile. Verificado sem rolagem lateral até 320px.
+* Cor de categoria vem da POSIÇÃO na lista ordenada (services/cores.js),
+  não de hash do nome. Hash colidia e três categorias saíam iguais.
+
+
+6. ESTADO DAS TELAS
+-------------------
+PRONTAS:
+  Login + 2FA (cadastro com QR e verificação)
+  Visão geral (KPIs, gráficos, pontos de atenção)
+  Entradas e Saídas
+  Investimentos (carteira com cotação da B3)
+  Configurações (perfil, foto, senha, 2FA, orçamentos)
+
+PLACEHOLDER (próxima etapa):
+  Metas. A ideia combinada é uma tela GAMIFICADA, com XP e subtarefas.
+  A tabela `metas` já existe no schema (titulo, alvo, guardado, prazo,
+  concluida) e vai precisar de colunas novas para XP e subtarefas.
+  NÃO foi iniciada.
+
+Entradas e Saídas são o MESMO componente (pages/Lancamentos.jsx) com a prop
+`natureza` trocada ("receita" / "despesa"). Não duplicar.
+
+
+7. ARMADILHAS DO AMBIENTE (isso já custou tempo)
+-------------------------------------------------
+* Existem DOIS venvs em ~/Pictures/guizao/python: `.venv` (com Flask,
+  PyMySQL e pyotp) e `venv` (vazio, sobra antiga). O ~/.bashrc, nas linhas
+  91-96, ativa automaticamente o `venv` ERRADO a cada shell novo. Sintoma:
+  "ModuleNotFoundError: No module named 'flask'".
+  Solução: source ../../.venv/Scripts/activate
+  Ou chamar direto: ../../.venv/Scripts/python.exe app.py
+  (O bloco no .bashrc também tenta rodar citacoes.py e falha em toda
+   abertura de terminal. Ele foi deixado como está, é arquivo pessoal.)
+
+* Nunca subir duas instâncias de app.py. Ver seção 4.
+
+* O scrypt precisa de maxmem declarado: o OpenSSL corta em 32MB e n=2^15
+  encosta exatamente nesse teto. Já está resolvido em seguranca.py.
+
+
+8. COTAÇÃO DA B3 (brapi.dev)
+-----------------------------
+Investimentos guarda ticker, quantidade e preço médio. O valor atual NÃO é
+gravado: é quantidade x cotação do momento.
+
+TOKEN: sem token a brapi aceita só UM ticker por request e recusa a lista
+com 401 MISSING_TOKEN. O código cobre os dois casos:
+  sem token -> um request por ticker, no máximo 6 (FIN_BRAPI_MAX_SEM_TOKEN)
+  com token -> um request só com a carteira inteira
+
+Para ligar o token (não precisa mexer em código):
+  export FIN_BRAPI_TOKEN=seu_token       # Git Bash
+  $env:FIN_BRAPI_TOKEN = "seu_token"     # PowerShell
+
+>>> PENDENTE: o token ainda não foi gerado. O dono vai criar em brapi.dev
+>>> e configurar depois. Até lá a tela funciona no modo sem token.
+
+Cache de 60s para não estourar o limite gratuito a cada F5.
+
+FALLBACK: cotacoes.buscar NUNCA levanta exceção. Devolve (cotações, aviso).
+Se a brapi cair, as posições aparecem completas sem os números de mercado e
+um aviso discreto explica. Testado com host inexistente: HTTP 200, itens
+completos, cotacao null.
+
+
+9. O QUE JÁ FOI TESTADO
+------------------------
+Backend, ponta a ponta contra a API rodando:
+  44 asserções no fluxo de auth/2FA/transações/orçamentos
+  23 asserções em transações + investimentos + isolamento entre usuários
+  5 asserções no fallback da cotação (API apontada para host inexistente)
+
+Frontend, com Playwright/Chromium em dark+light e desktop+mobile:
+  17 asserções nas três telas novas, incluindo adicionar e excluir de
+  verdade, cotação viva do PETR4 e ticker inválido marcado como sem cotação
+  12 asserções na foto de perfil
+  Zero erros de runtime, sem rolagem lateral a 320px
+
+
+10. PRÓXIMOS PASSOS SUGERIDOS
+------------------------------
+1. Gerar o token da brapi e configurar FIN_BRAPI_TOKEN.
+2. Tela de Metas gamificada (XP + subtarefas). Etapa combinada e não
+   iniciada.
+3. Empacotar com Tauri: tauri.conf.json aponta build.devUrl para
+   http://localhost:1420 e a API sobe como sidecar.
+   ui/src/services/api.js é o ÚNICO arquivo que sabe o endereço do
+   servidor; se a comunicação virar invoke() do Tauri, é só ali que muda.
+4. Editar lançamento existente (hoje só cria e exclui).
