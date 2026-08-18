@@ -155,8 +155,10 @@ dois tamanhos. Verificado sem rolagem lateral até 320px de largura.
 | Entradas (lista, cadastro, exclusão) | pronta |
 | Saídas (lista, cadastro, exclusão) | pronta |
 | Investimentos (carteira com cotação da B3) | pronta |
+| Metas gamificadas (XP, nível, subtarefas por IA) | pronta |
 | Configurações (perfil, foto, senha, 2FA, orçamentos) | pronta |
-| Metas | placeholder; tabela já existe no banco |
+
+Não há mais tela placeholder: `EmBreve.jsx` foi removido.
 
 Entradas e Saídas são **o mesmo componente** (`ui/src/pages/Lancamentos.jsx`)
 com `natureza` trocada. Mesma rota da API, mesmos campos, mesmos totais: manter
@@ -204,3 +206,82 @@ O front não usa nada de navegador que o webview não tenha. Para empacotar,
 sobe como sidecar. `ui/src/services/api.js` é o único arquivo que sabe o
 endereço do servidor: se um dia a comunicação virar `invoke()` do Tauri em
 vez de HTTP, é só ali que se mexe.
+
+
+## Metas gamificadas
+
+Cada meta se divide em subtarefas. Subtarefa concluída dá XP; concluir a
+meta inteira dá um bônus **maior que a soma das subtarefas dela** (fator
+1.5, mínimo 50), então nunca compensa parar com tudo feito menos o fim.
+
+O XP e o nível **não são gravados**: derivam do que está marcado como
+concluído (`api/gamificacao.py`). Guardar o total abriria espaço para ele
+divergir das subtarefas que o justificam, e o cálculo é barato o bastante
+para rodar a cada carga. Desmarcar uma subtarefa devolve o XP dela.
+
+A curva de nível é quadrática: nível 2 aos 100 XP, 3 aos 300, 4 aos 600.
+O avatar do personagem troca de patente conforme o nível (Semente, Brasa,
+Estrela, Gema, Coroa), só um ícone e uma cor.
+
+### Subtarefas geradas por IA
+
+A quebra automática da meta em passos acontece em **`api/ia.py`**, o único
+arquivo do projeto que fala com um modelo de linguagem. Ele usa o SDK
+oficial do Google (`google-genai`) com saída estruturada por schema, o que
+dispensa regex e retry de parse.
+
+**Configuração:** uma variável de ambiente com a chave.
+
+```bash
+export GEMINI_API_KEY=AIza...                    # Git Bash
+$env:GEMINI_API_KEY = "AIza..."                  # PowerShell (sessão atual)
+[Environment]::SetEnvironmentVariable("GEMINI_API_KEY", "AIza...", "User")
+```
+
+Gere em aistudio.google.com/apikey. O tier gratuito não pede cartão de
+crédito. O SDK também aceita `GOOGLE_API_KEY`, que tem precedência se as
+duas existirem; prefira `GEMINI_API_KEY`, porque o nome genérico pode
+colidir com outra ferramenta Google na mesma máquina.
+
+**Nenhuma credencial aparece no código**: o cliente é construído sem
+argumentos e o SDK resolve a chave do ambiente. `config.py` guarda só
+ajustes (modelo, timeout, teto de subtarefas), nunca segredo. Vale a mesma
+pegadinha do Windows da seção de armadilhas: variável com escopo "User" só
+é vista por processo aberto depois de configurada.
+
+O modelo é trocável sem mexer em código, do mais barato ao mais capaz:
+
+```bash
+FIN_IA_MODELO=gemini-3.5-flash-lite   # mais rápido e econômico
+FIN_IA_MODELO=gemini-3.5-flash        # padrão
+FIN_IA_MODELO=gemini-3.7-flash        # melhor julgamento
+```
+
+A geração recebe os passos que a meta já tem: o modelo complementa o
+caminho em vez de recomeçar, e um filtro no servidor barra qualquer
+repetição literal (case, acento e pontuação não contam como diferença).
+O nível de raciocínio é configurável por FIN_IA_THINKING (padrão MEDIUM).
+
+### Escada de níveis
+
+300 aparências únicas, seguindo o desenho dos sistemas de rank maduros:
+15 patamares com nome de material (Semente até Lenda, modelo Duolingo e
+Overwatch), 4 divisões em algarismo romano dentro de cada patamar (IV até
+I, modelo League of Legends) e 5 pips estilo insígnia militar dentro de
+cada divisão. Nível 1 e 2 diferem nos pips; 5 e 6 trocam de divisão; 20 e
+21 trocam de patamar inteiro. A lógica vive em ui/src/services/niveis.js
+e o servidor trava o nível em 300.
+
+### Exclusões e histórico
+
+Todo botão de excluir (meta, passo, lançamento, posição da carteira) abre
+um modal de confirmação que diz o que vai junto: passos, XP, valores. O
+foco inicial fica no Cancelar, então Enter por reflexo não apaga nada.
+
+Metas concluídas saem da lista principal e vão para a aba "Concluídas",
+com contador; reabrir traz de volta.
+
+**Sem a chave, nada quebra.** Mesmo contrato de `cotacoes.py`: a função
+nunca levanta exceção. A meta é criada do mesmo jeito, a caixa "sugerir os
+passos" aparece desabilitada explicando o que falta, e você escreve os
+passos à mão.

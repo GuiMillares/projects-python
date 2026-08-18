@@ -132,21 +132,47 @@ CREATE TABLE IF NOT EXISTS investimentos (
   CONSTRAINT ck_investimentos_preco CHECK (preco_medio > 0)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- ── Metas ───────────────────────────────────────────────────
--- A tela ainda não existe. A tabela fica criada para a etapa
--- seguinte (metas gamificadas, com XP e subtarefas), que vai
--- provavelmente acrescentar colunas aqui.
+-- ── Metas e subtarefas ──────────────────────────────────────
+-- Metas gamificadas: cada subtarefa concluída dá XP, e a meta
+-- inteira dá um bônus maior que a soma das subtarefas dela.
+-- O XP e o nível NÃO são gravados: são derivados do que está
+-- concluído (api/gamificacao.py). Guardar o total abriria espaço
+-- para ele divergir das subtarefas que o justificam.
 CREATE TABLE IF NOT EXISTS metas (
   id          BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   usuario_id  INT UNSIGNED    NOT NULL,
   titulo      VARCHAR(160)    NOT NULL,
-  alvo        DECIMAL(14,2)   NOT NULL,
+  descricao   TEXT            NULL,
+  -- NULL quando a meta não é financeira ("correr 10km", "ler 12 livros").
+  alvo        DECIMAL(14,2)   NULL,
   guardado    DECIMAL(14,2)   NOT NULL DEFAULT 0,
   prazo       DATE            NULL,
   concluida   TINYINT(1)      NOT NULL DEFAULT 0,
+  concluida_em DATETIME       NULL,
   criado_em   DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
   KEY ix_metas_usuario (usuario_id),
   CONSTRAINT fk_metas_usuario FOREIGN KEY (usuario_id)
     REFERENCES usuarios (id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS subtarefas (
+  id            BIGINT UNSIGNED   NOT NULL AUTO_INCREMENT,
+  meta_id       BIGINT UNSIGNED   NOT NULL,
+  titulo        VARCHAR(200)      NOT NULL,
+  concluida     TINYINT(1)        NOT NULL DEFAULT 0,
+  -- XP por subtarefa em vez de valor fixo: a IA pondera passo difícil
+  -- valendo mais que passo trivial.
+  xp            SMALLINT UNSIGNED NOT NULL DEFAULT 10,
+  ordem         SMALLINT UNSIGNED NOT NULL DEFAULT 0,
+  gerada_por_ia TINYINT(1)        NOT NULL DEFAULT 0,
+  concluida_em  DATETIME          NULL,
+  criado_em     DATETIME          NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  KEY ix_subtarefas_meta (meta_id, ordem),
+  -- Sem usuario_id aqui de propósito: a dona é a meta, e a checagem de
+  -- posse sempre passa por ela (JOIN em metas).
+  CONSTRAINT fk_subtarefas_meta FOREIGN KEY (meta_id)
+    REFERENCES metas (id) ON DELETE CASCADE,
+  CONSTRAINT ck_subtarefas_xp CHECK (xp > 0)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

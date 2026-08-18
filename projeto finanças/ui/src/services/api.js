@@ -53,5 +53,6 @@ export const api = {
   get: (c) => pedir(c),
   post: (c, corpo) => pedir(c, { metodo: "POST", corpo }),
   put: (c, corpo) => pedir(c, { metodo: "PUT", corpo }),
+  patch: (c, corpo) => pedir(c, { metodo: "PATCH", corpo }),
   del: (c) => pedir(c, { metodo: "DELETE" }),
 };

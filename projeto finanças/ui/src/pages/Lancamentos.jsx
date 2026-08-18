@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import ConfirmarExclusao from "../components/ConfirmarExclusao";
 import { criarMapaDeCores } from "../services/cores";
 import {
   apagarTransacao,
@@ -79,6 +80,7 @@ export default function Lancamentos({ natureza }) {
   const [form, setForm] = useState(formularioVazio);
   const [salvando, setSalvando] = useState(false);
   const [apagando, setApagando] = useState(null);
+  const [paraExcluir, setParaExcluir] = useState(null);
 
   const avisar = (msg, tipo = "success") => {
     setToast({ msg, tipo });
@@ -179,11 +181,16 @@ export default function Lancamentos({ natureza }) {
     }
   };
 
-  const excluir = async (t) => {
+  // A exclusão só roda depois do modal confirmar; o clique no ícone apenas
+  // guarda o lançamento em `paraExcluir` e abre o modal.
+  const excluir = async () => {
+    const t = paraExcluir;
+    if (!t) return;
     setApagando(t.id);
     try {
       await apagarTransacao(t.id);
       setTransacoes((lista) => lista.filter((x) => x.id !== t.id));
+      setParaExcluir(null);
       avisar("Lançamento excluído.");
     } catch (err) {
       avisar(err.message, "error");
@@ -424,22 +431,30 @@ export default function Lancamentos({ natureza }) {
 
                 <button
                   className="fin-lanc-item__excluir"
-                  onClick={() => excluir(t)}
+                  onClick={() => setParaExcluir(t)}
                   disabled={apagando === t.id}
                   aria-label={`Excluir ${t.nome}`}
                   title="Excluir"
                 >
-                  {apagando === t.id ? (
-                    <Loader2 size={14} className="fin-spin" />
-                  ) : (
-                    <Trash2 size={14} />
-                  )}
+                  <Trash2 size={14} />
                 </button>
               </div>
             ))}
           </div>
         )}
       </div>
+
+      {paraExcluir && (
+        <ConfirmarExclusao
+          titulo={`Excluir "${paraExcluir.nome}"?`}
+          mensagem={`O lançamento de ${brl(paraExcluir.valor)} em ${dataCurta(
+            paraExcluir.data,
+          )} sai dos totais e dos gráficos. Não dá para desfazer.`}
+          ocupado={apagando === paraExcluir.id}
+          onConfirmar={excluir}
+          onCancelar={() => setParaExcluir(null)}
+        />
+      )}
 
       {toast && (
         <div className={`fin-toast fin-toast--${toast.tipo}`} role="status">

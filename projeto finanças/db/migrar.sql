@@ -74,3 +74,56 @@ CREATE TABLE IF NOT EXISTS investimentos (
   CONSTRAINT ck_investimentos_qtd CHECK (quantidade > 0),
   CONSTRAINT ck_investimentos_preco CHECK (preco_medio > 0)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 2026-08: metas gamificadas + subtarefas
+--
+-- A tabela `metas` original só previa meta financeira (alvo NOT NULL).
+-- Agora ela também cobre meta sem valor ("correr 10km"), então `alvo`
+-- passa a aceitar NULL e ganha descrição.
+SET @tem_descricao := (
+  SELECT COUNT(*) FROM information_schema.COLUMNS
+   WHERE TABLE_SCHEMA = 'local_finance' AND TABLE_NAME = 'metas'
+     AND COLUMN_NAME = 'descricao'
+);
+SET @sql := IF(@tem_descricao = 0,
+  'ALTER TABLE metas ADD COLUMN descricao TEXT NULL AFTER titulo',
+  'SELECT "metas.descricao já existe" AS aviso');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @tem_concluida_em := (
+  SELECT COUNT(*) FROM information_schema.COLUMNS
+   WHERE TABLE_SCHEMA = 'local_finance' AND TABLE_NAME = 'metas'
+     AND COLUMN_NAME = 'concluida_em'
+);
+SET @sql := IF(@tem_concluida_em = 0,
+  'ALTER TABLE metas ADD COLUMN concluida_em DATETIME NULL',
+  'SELECT "metas.concluida_em já existe" AS aviso');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+-- MODIFY é naturalmente idempotente: reaplicar o mesmo tipo não faz nada.
+ALTER TABLE metas MODIFY COLUMN alvo DECIMAL(14,2) NULL;
+
+-- Subtarefas: os passos concretos de uma meta. Cada uma vale XP.
+CREATE TABLE IF NOT EXISTS subtarefas (
+  id            BIGINT UNSIGNED   NOT NULL AUTO_INCREMENT,
+  meta_id       BIGINT UNSIGNED   NOT NULL,
+  titulo        VARCHAR(200)      NOT NULL,
+  concluida     TINYINT(1)        NOT NULL DEFAULT 0,
+  -- XP por subtarefa em vez de valor fixo: a IA pondera passo difícil
+  -- valendo mais que passo trivial.
+  xp            SMALLINT UNSIGNED NOT NULL DEFAULT 10,
+  ordem         SMALLINT UNSIGNED NOT NULL DEFAULT 0,
+  -- Marca a procedência para a tela distinguir o que a IA sugeriu do que
+  -- foi escrito à mão.
+  gerada_por_ia TINYINT(1)        NOT NULL DEFAULT 0,
+  concluida_em  DATETIME          NULL,
+  criado_em     DATETIME          NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  KEY ix_subtarefas_meta (meta_id, ordem),
+  -- Sem usuario_id aqui de propósito: a dona é a meta, e a checagem de
+  -- posse sempre passa por ela (JOIN em metas). Duplicar o usuário abriria
+  -- espaço para os dois campos discordarem.
+  CONSTRAINT fk_subtarefas_meta FOREIGN KEY (meta_id)
+    REFERENCES metas (id) ON DELETE CASCADE,
+  CONSTRAINT ck_subtarefas_xp CHECK (xp > 0)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import ConfirmarExclusao from "../components/ConfirmarExclusao";
 import { brl, dataCurta } from "../services/financasService";
 import {
   apagarInvestimento,
@@ -68,6 +69,7 @@ export default function Investimentos() {
   const [form, setForm] = useState(formularioVazio);
   const [salvando, setSalvando] = useState(false);
   const [apagando, setApagando] = useState(null);
+  const [paraExcluir, setParaExcluir] = useState(null);
 
   const [cotacaoBusca, setCotacaoBusca] = useState({ buscando: false, dados: null, erro: "" });
   // Guarda o último preço que NÓS preenchemos, não o usuário. Assim, se ele
@@ -172,11 +174,16 @@ export default function Investimentos() {
     }
   };
 
-  const excluir = async (item) => {
+  // A exclusão só roda depois do modal confirmar; o clique no ícone apenas
+  // guarda a posição em `paraExcluir` e abre o modal.
+  const excluir = async () => {
+    const item = paraExcluir;
+    if (!item) return;
     setApagando(item.id);
     try {
       await apagarInvestimento(item.id);
       setItens((l) => l.filter((x) => x.id !== item.id));
+      setParaExcluir(null);
       notificar("Posição removida.");
     } catch (err) {
       notificar(err.message, "error");
@@ -489,16 +496,12 @@ export default function Investimentos() {
 
                   <button
                     className="fin-lanc-item__excluir"
-                    onClick={() => excluir(p)}
+                    onClick={() => setParaExcluir(p)}
                     disabled={apagando === p.id}
                     aria-label={`Remover ${p.ticker}`}
                     title="Remover"
                   >
-                    {apagando === p.id ? (
-                      <Loader2 size={14} className="fin-spin" />
-                    ) : (
-                      <Trash2 size={14} />
-                    )}
+                    <Trash2 size={14} />
                   </button>
                 </div>
               );
@@ -506,6 +509,18 @@ export default function Investimentos() {
           </div>
         )}
       </div>
+
+      {paraExcluir && (
+        <ConfirmarExclusao
+          titulo={`Remover ${paraExcluir.ticker} da carteira?`}
+          mensagem={`A posição de ${qtd(paraExcluir.quantidade)} a ${brl(
+            paraExcluir.precoMedio,
+          )} (${brl(paraExcluir.investido)} investidos) sai da carteira e dos totais. Não dá para desfazer.`}
+          ocupado={apagando === paraExcluir.id}
+          onConfirmar={excluir}
+          onCancelar={() => setParaExcluir(null)}
+        />
+      )}
 
       {toast && (
         <div className={`fin-toast fin-toast--${toast.tipo}`} role="status">

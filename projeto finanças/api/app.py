@@ -11,7 +11,7 @@ Rodar:
 """
 
 import re
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from functools import wraps
 
@@ -20,6 +20,8 @@ from werkzeug.exceptions import HTTPException
 
 import config
 import cotacoes
+import gamificacao
+import ia
 import seguranca
 from db import buscar_todos, buscar_um, cursor
 
@@ -41,7 +43,7 @@ def cors(resp):
     if origem in config.ORIGENS_PERMITIDAS:
         resp.headers["Access-Control-Allow-Origin"] = origem
         resp.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
-        resp.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
+        resp.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, PATCH, DELETE, OPTIONS"
         resp.headers["Vary"] = "Origin"
     return resp
 
@@ -477,6 +479,284 @@ def apagar_investimento(investimento_id):
         )
         if cur.rowcount == 0:
             return erro("Investimento não encontrado.", 404)
+    return jsonify({"ok": True})
+
+
+# ── Metas e subtarefas ───────────────────────────────────────
+def _carregar_metas(usuario_id):
+    """Metas do usuário com as subtarefas embutidas.
+
+    Duas consultas em vez de um JOIN: o JOIN devolveria a meta repetida uma
+    vez por subtarefa e a montagem em Python daria no mesmo trabalho.
+    """
+    metas = buscar_todos(
+        "SELECT id, titulo, descricao, alvo, guardado, prazo, concluida, "
+        "       concluida_em, criado_em "
+        "  FROM metas WHERE usuario_id = %s "
+        " ORDER BY concluida, COALESCE(prazo, '9999-12-31'), id",
+        (usuario_id,),
+    )
+    if not metas:
+        return []
+
+    ids = [m["id"] for m in metas]
+    marcadores = ",".join(["%s"] * len(ids))
+    subs = buscar_todos(
+        "SELECT id, meta_id, titulo, concluida, xp, ordem, gerada_por_ia "
+        f"  FROM subtarefas WHERE meta_id IN ({marcadores}) "
+        " ORDER BY meta_id, ordem, id",
+        tuple(ids),
+    )
+
+    por_meta = {i: [] for i in ids}
+    for s in subs:
+        por_meta[s["meta_id"]].append({
+            "id": s["id"],
+            "titulo": s["titulo"],
+            "concluida": bool(s["concluida"]),
+            "xp": int(s["xp"]),
+            "ordem": int(s["ordem"]),
+            "geradaPorIa": bool(s["gerada_por_ia"]),
+        })
+
+    return [{
+        "id": m["id"],
+        "titulo": m["titulo"],
+        "descricao": m["descricao"],
+        "alvo": float(m["alvo"]) if m["alvo"] is not None else None,
+        "guardado": float(m["guardado"]),
+        "prazo": m["prazo"].isoformat() if isinstance(m["prazo"], date) else m["prazo"],
+        "concluida": bool(m["concluida"]),
+        "subtarefas": por_meta[m["id"]],
+        "bonusXp": gamificacao.bonus_da_meta(sum(s["xp"] for s in por_meta[m["id"]])),
+    } for m in metas]
+
+
+def _meta_do_usuario(meta_id, usuario_id):
+    """Confere posse. O usuario_id no WHERE é o que impede um id chutado
+    de alcançar meta de outra conta."""
+    return buscar_um(
+        "SELECT id FROM metas WHERE id = %s AND usuario_id = %s",
+        (meta_id, usuario_id),
+    )
+
+
+@app.get("/api/metas")
+@exige_sessao()
+def listar_metas():
+    metas = _carregar_metas(g.sessao["usuario_id"])
+    return jsonify({
+        "metas": metas,
+        # O personagem é derivado das metas, não guardado. Ver gamificacao.py.
+        "personagem": gamificacao.progresso(gamificacao.calcular_xp(metas)),
+        "iaDisponivel": ia.disponivel(),
+    })
+
+
+@app.post("/api/metas")
+@exige_sessao()
+def criar_meta():
+    """Cria a meta e, se pedido, já sugere os passos via IA.
+
+    A geração NUNCA impede a criação: se a IA falhar, a meta é gravada do
+    mesmo jeito e o `aviso` explica por que veio sem subtarefas.
+    """
+    d = request.get_json(silent=True) or {}
+    titulo = (d.get("titulo") or "").strip()[:160]
+    if not titulo:
+        return erro("Informe o título da meta.")
+
+    descricao = (d.get("descricao") or "").strip() or None
+
+    alvo = None
+    if d.get("alvo") not in (None, ""):
+        try:
+            alvo = Decimal(str(d["alvo"]))
+        except Exception:
+            return erro("Valor alvo inválido.")
+        if alvo <= 0:
+            return erro("O valor alvo precisa ser maior que zero.")
+
+    with cursor(commit=True) as cur:
+        cur.execute(
+            "INSERT INTO metas (usuario_id, titulo, descricao, alvo, prazo) "
+            "VALUES (%s, %s, %s, %s, %s)",
+            (g.sessao["usuario_id"], titulo, descricao, alvo, d.get("prazo") or None),
+        )
+        meta_id = cur.lastrowid
+
+    aviso = None
+    if d.get("gerarSubtarefas"):
+        subtarefas, aviso = ia.gerar_subtarefas(titulo, descricao, alvo, d.get("prazo"))
+        if subtarefas:
+            _inserir_subtarefas(meta_id, subtarefas, por_ia=True)
+
+    return jsonify({"ok": True, "id": meta_id, "aviso": aviso}), 201
+
+
+def _inserir_subtarefas(meta_id, subtarefas, por_ia):
+    with cursor(commit=True) as cur:
+        cur.executemany(
+            "INSERT INTO subtarefas (meta_id, titulo, xp, ordem, gerada_por_ia) "
+            "VALUES (%s, %s, %s, %s, %s)",
+            [(meta_id, s["titulo"], s["xp"], s.get("ordem", i), int(por_ia))
+             for i, s in enumerate(subtarefas)],
+        )
+
+
+@app.post("/api/metas/<int:meta_id>/subtarefas/gerar")
+@exige_sessao()
+def gerar_subtarefas_da_meta(meta_id):
+    """Gera passos para uma meta que já existe (ou gera de novo)."""
+    if not _meta_do_usuario(meta_id, g.sessao["usuario_id"]):
+        return erro("Meta não encontrada.", 404)
+
+    meta = buscar_um(
+        "SELECT titulo, descricao, alvo, prazo FROM metas WHERE id = %s", (meta_id,)
+    )
+    # Os títulos existentes vão junto: o modelo complementa o caminho em vez
+    # de recomeçar do zero, e o filtro em ia.py barra repetição literal.
+    existentes = [
+        s["titulo"] for s in buscar_todos(
+            "SELECT titulo FROM subtarefas WHERE meta_id = %s ORDER BY ordem", (meta_id,)
+        )
+    ]
+    subtarefas, aviso = ia.gerar_subtarefas(
+        meta["titulo"], meta["descricao"], meta["alvo"], meta["prazo"],
+        existentes=existentes,
+    )
+    if subtarefas:
+        _inserir_subtarefas(meta_id, subtarefas, por_ia=True)
+
+    return jsonify({"ok": bool(subtarefas), "criadas": len(subtarefas), "aviso": aviso})
+
+
+@app.post("/api/metas/<int:meta_id>/subtarefas")
+@exige_sessao()
+def criar_subtarefa(meta_id):
+    """Passo escrito à mão."""
+    if not _meta_do_usuario(meta_id, g.sessao["usuario_id"]):
+        return erro("Meta não encontrada.", 404)
+
+    d = request.get_json(silent=True) or {}
+    titulo = (d.get("titulo") or "").strip()[:200]
+    if not titulo:
+        return erro("Informe o título da subtarefa.")
+
+    ultima = buscar_um(
+        "SELECT COALESCE(MAX(ordem), -1) AS u FROM subtarefas WHERE meta_id = %s",
+        (meta_id,),
+    )
+    with cursor(commit=True) as cur:
+        cur.execute(
+            "INSERT INTO subtarefas (meta_id, titulo, xp, ordem) VALUES (%s, %s, %s, %s)",
+            (meta_id, titulo, max(1, min(int(d.get("xp", 10) or 10), 100)), ultima["u"] + 1),
+        )
+        return jsonify({"ok": True, "id": cur.lastrowid}), 201
+
+
+@app.patch("/api/subtarefas/<int:subtarefa_id>")
+@exige_sessao()
+def alternar_subtarefa(subtarefa_id):
+    """Marca ou desmarca. É daqui que sai o XP."""
+    concluida = bool((request.get_json(silent=True) or {}).get("concluida"))
+
+    # O JOIN em metas é a checagem de posse: subtarefas não guardam
+    # usuario_id, a dona é a meta.
+    with cursor(commit=True) as cur:
+        cur.execute(
+            "UPDATE subtarefas s JOIN metas m ON m.id = s.meta_id "
+            "   SET s.concluida = %s, s.concluida_em = %s "
+            " WHERE s.id = %s AND m.usuario_id = %s",
+            (int(concluida), datetime.now() if concluida else None,
+             subtarefa_id, g.sessao["usuario_id"]),
+        )
+        if cur.rowcount == 0:
+            # rowcount 0 também acontece quando o valor já era esse; conferir
+            # a existência separa "não é sua" de "não mudou nada".
+            existe = buscar_um(
+                "SELECT s.id FROM subtarefas s JOIN metas m ON m.id = s.meta_id "
+                " WHERE s.id = %s AND m.usuario_id = %s",
+                (subtarefa_id, g.sessao["usuario_id"]),
+            )
+            if not existe:
+                return erro("Subtarefa não encontrada.", 404)
+
+    metas = _carregar_metas(g.sessao["usuario_id"])
+    # Devolve o personagem recalculado para a tela animar o ganho de XP sem
+    # precisar de uma segunda chamada.
+    return jsonify({
+        "ok": True,
+        "personagem": gamificacao.progresso(gamificacao.calcular_xp(metas)),
+    })
+
+
+@app.delete("/api/subtarefas/<int:subtarefa_id>")
+@exige_sessao()
+def apagar_subtarefa(subtarefa_id):
+    with cursor(commit=True) as cur:
+        cur.execute(
+            "DELETE s FROM subtarefas s JOIN metas m ON m.id = s.meta_id "
+            " WHERE s.id = %s AND m.usuario_id = %s",
+            (subtarefa_id, g.sessao["usuario_id"]),
+        )
+        if cur.rowcount == 0:
+            return erro("Subtarefa não encontrada.", 404)
+    return jsonify({"ok": True})
+
+
+@app.patch("/api/metas/<int:meta_id>")
+@exige_sessao()
+def atualizar_meta(meta_id):
+    """Conclui/reabre a meta ou atualiza quanto já foi guardado."""
+    if not _meta_do_usuario(meta_id, g.sessao["usuario_id"]):
+        return erro("Meta não encontrada.", 404)
+
+    d = request.get_json(silent=True) or {}
+    campos, valores = [], []
+
+    if "concluida" in d:
+        concluida = bool(d["concluida"])
+        campos += ["concluida = %s", "concluida_em = %s"]
+        valores += [int(concluida), datetime.now() if concluida else None]
+
+    if "guardado" in d:
+        try:
+            guardado = Decimal(str(d["guardado"]))
+        except Exception:
+            return erro("Valor guardado inválido.")
+        if guardado < 0:
+            return erro("O valor guardado não pode ser negativo.")
+        campos.append("guardado = %s")
+        valores.append(guardado)
+
+    if not campos:
+        return erro("Nada para atualizar.")
+
+    with cursor(commit=True) as cur:
+        cur.execute(
+            f"UPDATE metas SET {', '.join(campos)} WHERE id = %s AND usuario_id = %s",
+            (*valores, meta_id, g.sessao["usuario_id"]),
+        )
+
+    metas = _carregar_metas(g.sessao["usuario_id"])
+    return jsonify({
+        "ok": True,
+        "personagem": gamificacao.progresso(gamificacao.calcular_xp(metas)),
+    })
+
+
+@app.delete("/api/metas/<int:meta_id>")
+@exige_sessao()
+def apagar_meta(meta_id):
+    # As subtarefas somem junto pelo ON DELETE CASCADE da chave estrangeira.
+    with cursor(commit=True) as cur:
+        cur.execute(
+            "DELETE FROM metas WHERE id = %s AND usuario_id = %s",
+            (meta_id, g.sessao["usuario_id"]),
+        )
+        if cur.rowcount == 0:
+            return erro("Meta não encontrada.", 404)
     return jsonify({"ok": True})
 
 
