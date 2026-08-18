@@ -1,7 +1,8 @@
 CONTEXTO DO PROJETO: Painel financeiro pessoal
 ==============================================
-Cole este arquivo no Claude Code de casa para retomar o trabalho.
-Última atualização: 17/08/2026
+Cole este arquivo no Claude Code de casa (ou do trabalho) para retomar o
+trabalho.
+Última atualização: 17/08/2026 (à noite: correção da API da brapi e token)
 
 
 1. O QUE É
@@ -161,23 +162,56 @@ Entradas e Saídas são o MESMO componente (pages/Lancamentos.jsx) com a prop
 * O scrypt precisa de maxmem declarado: o OpenSSL corta em 32MB e n=2^15
   encosta exatamente nesse teto. Já está resolvido em seguranca.py.
 
+* PC NOVO (ex: do trabalho): o Laragon não vem instalado sozinho. Sem ele
+  o MySQL não existe e a API sobe normal mas todo request ao banco cai com
+  "ConnectionRefusedError" / pymysql OperationalError 2003, parecendo bug
+  de código quando na verdade é só instalar o Laragon (laragon.org) antes
+  do passo 3a e rodar o passo 3b (schema.sql + migrar.sql) pela primeira
+  vez nesse PC.
+
+* Variável de ambiente PERMANENTE do Windows (setx / SetEnvironmentVariable
+  com escopo "User", ver seção 8 sobre FIN_BRAPI_TOKEN) só é enxergada por
+  processos abertos DEPOIS de configurada. Um terminal, VS Code ou Claude
+  Code que já estava aberto continua sem ver o valor até ser fechado e
+  reaberto de verdade. Isso já confundiu um teste (a API parecia sem
+  token mesmo depois de configurado).
+
 
 8. COTAÇÃO DA B3 (brapi.dev)
 -----------------------------
 Investimentos guarda ticker, quantidade e preço médio. O valor atual NÃO é
 gravado: é quantidade x cotação do momento.
 
-TOKEN: sem token a brapi aceita só UM ticker por request e recusa a lista
-com 401 MISSING_TOKEN. O código cobre os dois casos:
+A brapi descontinuou a v1 (/api/quote/{tickers}?token=) e migrou para v2:
+  GET {BRAPI_BASE}/v2/stocks/quote?symbols=TICKER1,TICKER2
+com o token (quando existe) no header "Authorization: Bearer SEU_TOKEN",
+não mais em ?token= (isso agora só vale pra ferramentas no-code, segundo
+a doc deles). O payload de cada item também mudou: os números ficam
+aninhados em "data" (res["data"]["regularMarketPrice"]), antes era plano
+no próprio item. cotacoes.py já foi corrigido pra isso em 17/08/2026; se
+voltar a dar 401 mesmo com token certo, a API pode ter mudado nome do
+campo de novo, vale conferir a doc em brapi.dev/docs.
+
+TOKEN: sem token a brapi só responde SEM autenticação pra um punhado de
+tickers conhecidos (PETR4, VALE3, MGLU3, ITUB4...) e recusa o resto com
+401 MISSING_TOKEN. O código cobre os dois casos:
   sem token -> um request por ticker, no máximo 6 (FIN_BRAPI_MAX_SEM_TOKEN)
   com token -> um request só com a carteira inteira
 
-Para ligar o token (não precisa mexer em código):
-  export FIN_BRAPI_TOKEN=seu_token       # Git Bash
-  $env:FIN_BRAPI_TOKEN = "seu_token"     # PowerShell
-
->>> PENDENTE: o token ainda não foi gerado. O dono vai criar em brapi.dev
->>> e configurar depois. Até lá a tela funciona no modo sem token.
+>>> TOKEN JÁ GERADO em brapi.dev (17/08/2026). NÃO está neste arquivo nem
+>>> em nenhum arquivo do repositório de propósito (segredo não vai pro
+>>> git). Guardado neste PC como variável de ambiente PERMANENTE do
+>>> Windows. Pegue o valor num cofre de senhas, não aqui.
+>>>
+>>> Em QUALQUER outro computador (ex: do trabalho) isso precisa ser
+>>> configurado de novo, uma vez por PC:
+>>>   permanente (uma vez, PowerShell):
+>>>     [Environment]::SetEnvironmentVariable("FIN_BRAPI_TOKEN", "SEU_TOKEN", "User")
+>>>   só na sessão atual, pra testar rápido:
+>>>     $env:FIN_BRAPI_TOKEN = "seu_token"     # PowerShell
+>>>     export FIN_BRAPI_TOKEN=seu_token       # Git Bash
+>>> Ver a pegadinha da variável permanente na seção 7 (só terminal aberto
+>>> DEPOIS de configurar enxerga o valor).
 
 Cache de 60s para não estourar o limite gratuito a cada F5.
 
@@ -185,6 +219,13 @@ FALLBACK: cotacoes.buscar NUNCA levanta exceção. Devolve (cotações, aviso).
 Se a brapi cair, as posições aparecem completas sem os números de mercado e
 um aviso discreto explica. Testado com host inexistente: HTTP 200, itens
 completos, cotacao null.
+
+FORMULÁRIO DE NOVO INVESTIMENTO: ao digitar um ticker que já parece
+completo (4 letras + 1 ou 2 dígitos, ex: PETR4, HGLG11), a tela busca a
+cotação sozinha (debounce de 500ms, rota GET /api/cotacoes/<ticker>) e
+preenche "Preço médio" com o valor atual, só pra facilitar. Editar esse
+campo na mão tem prioridade e para o preenchimento automático: é o preço
+que a pessoa realmente pagou que importa, não o preço de agora.
 
 
 9. O QUE JÁ FOI TESTADO
@@ -203,11 +244,14 @@ Frontend, com Playwright/Chromium em dark+light e desktop+mobile:
 
 10. PRÓXIMOS PASSOS SUGERIDOS
 ------------------------------
-1. Gerar o token da brapi e configurar FIN_BRAPI_TOKEN.
-2. Tela de Metas gamificada (XP + subtarefas). Etapa combinada e não
+1. Tela de Metas gamificada (XP + subtarefas). Etapa combinada e não
    iniciada.
-3. Empacotar com Tauri: tauri.conf.json aponta build.devUrl para
+2. Empacotar com Tauri: tauri.conf.json aponta build.devUrl para
    http://localhost:1420 e a API sobe como sidecar.
    ui/src/services/api.js é o ÚNICO arquivo que sabe o endereço do
    servidor; se a comunicação virar invoke() do Tauri, é só ali que muda.
-4. Editar lançamento existente (hoje só cria e exclui).
+3. Editar lançamento existente (hoje só cria e exclui).
+
+Feito em 17/08/2026: token da brapi gerado e configurado (ver seção 8),
+API corrigida pra v2 da brapi, e o formulário de investimento agora sugere
+o preço médio a partir da cotação ao vivo do ticker digitado.
