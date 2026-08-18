@@ -2,7 +2,7 @@ CONTEXTO DO PROJETO: Painel financeiro pessoal
 ==============================================
 Cole este arquivo no Claude Code de casa (ou do trabalho) para retomar o
 trabalho.
-Última atualização: 17/08/2026 (à noite: correção da API da brapi e token)
+Última atualização: 18/08/2026 (refino das Metas: escada de 300 níveis, modais, abas)
 
 
 1. O QUE É
@@ -25,6 +25,8 @@ projeto finanças/
     db.py              conexão MySQL (PyMySQL), sempre com parâmetro %s
     seguranca.py       senha (scrypt), sessões e TOTP
     cotacoes.py        cliente brapi.dev (cotação da B3)
+    gamificacao.py     regras de XP, nível e bônus (funções puras)
+    ia.py              ÚNICO arquivo que chama um LLM (Google Gemini)
     config.py          tudo configurável por variável de ambiente
     criar_usuario.py   CLI para criar/trocar senha do usuário
     importar_sqlite.py traz o financas.db antigo para o MySQL
@@ -33,7 +35,8 @@ projeto finanças/
                        Configuracoes, EmBreve
     src/components/    AppLayout, Charts (SVG próprios)
     src/services/      api, authService, financasService,
-                       investimentosService, perfilService, cores, imagem
+                       investimentosService, metasService, perfilService,
+                       cores, imagem
     src/styles/        tokens.css (TODA a cor), app.css (layout)
   financas.py          CLI antiga em SQLite, origem dos dados a importar
   README.md            instruções detalhadas
@@ -134,13 +137,10 @@ PRONTAS:
   Visão geral (KPIs, gráficos, pontos de atenção)
   Entradas e Saídas
   Investimentos (carteira com cotação da B3)
+  Metas gamificadas (XP, nível, subtarefas sugeridas por IA)
   Configurações (perfil, foto, senha, 2FA, orçamentos)
 
-PLACEHOLDER (próxima etapa):
-  Metas. A ideia combinada é uma tela GAMIFICADA, com XP e subtarefas.
-  A tabela `metas` já existe no schema (titulo, alvo, guardado, prazo,
-  concluida) e vai precisar de colunas novas para XP e subtarefas.
-  NÃO foi iniciada.
+NÃO HÁ MAIS TELA PLACEHOLDER. O componente EmBreve.jsx foi removido.
 
 Entradas e Saídas são o MESMO componente (pages/Lancamentos.jsx) com a prop
 `natureza` trocada ("receita" / "despesa"). Não duplicar.
@@ -239,14 +239,74 @@ Frontend, com Playwright/Chromium em dark+light e desktop+mobile:
   17 asserções nas três telas novas, incluindo adicionar e excluir de
   verdade, cotação viva do PETR4 e ticker inválido marcado como sem cotação
   12 asserções na foto de perfil
+  33 asserções em metas/subtarefas: XP subindo e voltando, bônus maior que
+  a soma, isolamento entre usuários, cascade ao apagar a meta
+  21 asserções em api/ia.py com cliente simulado (parsing, corte no teto,
+  XP preso à faixa, cada erro do SDK virando texto útil)
+  23 asserções na tela de Metas no browser
   Zero erros de runtime, sem rolagem lateral a 320px
+
+NÃO TESTADO: a chamada real ao Gemini. Não havia GEMINI_API_KEY no ambiente
+onde o código foi escrito, então o que foi verificado é tudo em volta dela
+(o que é enviado, o que é feito com a resposta, cada tipo de falha), mas a
+ida à rede em si nunca rodou. É o único trecho sem verificação de execução.
+
+
+9b. METAS E IA
+---------------
+XP e nível NÃO são gravados: derivam do que está concluído
+(api/gamificacao.py). Bônus da meta = 1.5x a soma das subtarefas, mínimo
+50, sempre maior que a soma. Curva: nível 2 aos 100 XP, 3 aos 300, 4 aos
+600.
+
+A quebra da meta em passos vive em api/ia.py, o ÚNICO arquivo que fala com
+um LLM. Provedor: GOOGLE GEMINI (SDK google-genai), escolhido em 18/08/2026
+por causa do tier gratuito sem cartão. Saída estruturada por JSON schema,
+thinking em nível LOW, modelo padrão gemini-3.5-flash (trocável por
+FIN_IA_MODELO: gemini-3.5-flash-lite é mais barato, gemini-3.7-flash é
+melhor).
+
+O contrato do módulo é (subtarefas, aviso) e ele NUNCA levanta exceção. Foi
+o que deixou a troca de provedor (Anthropic -> Gemini) custar um arquivo
+só: rotas, banco, gamificação e tela não souberam da mudança.
+
+REFINOS DE 18/08 (tarde), todos testados inclusive com chamada REAL ao
+Gemini (a chave foi configurada neste PC):
+* Geração mais inteligente: prompt exige passos específicos da meta (com
+  contas reais de aporte/prazo), thinking MEDIUM (FIN_IA_THINKING), e a
+  rota de "sugerir mais" manda os passos existentes para o modelo
+  complementar; ia.py ainda filtra repetição literal (case/acento/
+  pontuação) via _normalizar. Teste real: meta de viagem ao Japão, 2a
+  leva veio 100% inédita (seguro, eSIM, Suica, câmbio, Visit Japan Web).
+* Escada de níveis: 300 aparências únicas em ui/src/services/niveis.js
+  (15 patamares x 4 divisões IV-I x 5 pips, pesquisado em LoL/Duolingo/
+  insígnias militares). gamificacao.py trava o nível em NIVEL_MAXIMO=300.
+* Exclusões confirmam num modal (components/ConfirmarExclusao.jsx), usado
+  em Metas (meta e passo), Entradas/Saídas e Investimentos. Foco inicial
+  no Cancelar; Esc e clique no véu fecham.
+* Metas concluídas vão para a aba "Concluídas" (filtro fin-seg com
+  contadores); concluir uma meta a move na hora.
+
+>>> PENDENTE: GEMINI_API_KEY ainda não foi configurada. Sem ela a tela
+>>> funciona, só que a caixa "sugerir os passos" vem desabilitada
+>>> explicando o que falta. Gere em aistudio.google.com/apikey e configure:
+>>>   [Environment]::SetEnvironmentVariable("GEMINI_API_KEY","AIza...","User")
+>>> A chave NÃO fica em arquivo nenhum do repositório: o SDK a lê do
+>>> ambiente sozinho. O SDK também aceita GOOGLE_API_KEY (com precedência),
+>>> mas prefira GEMINI_API_KEY para não colidir com outra ferramenta.
 
 
 10. PRÓXIMOS PASSOS SUGERIDOS
 ------------------------------
-1. Tela de Metas gamificada (XP + subtarefas). Etapa combinada e não
-   iniciada.
-2. Empacotar com Tauri: tauri.conf.json aponta build.devUrl para
+1. Configurar GEMINI_API_KEY para ligar a sugestão de passos por IA.
+2. FASE 2 combinada e NÃO iniciada: duplicar o projeto para
+   "projeto financas-firestore/" trocando Flask+MySQL por Firebase Auth +
+   Firestore, com espaços (workspaces) compartilhados para casal e
+   empresas. O projeto atual continua intacto rodando no VPS por mais duas
+   semanas. ANTES de codar essa fase é OBRIGATÓRIO pedir ao dono: as
+   credenciais do SDK web, se é projeto Firebase novo ou o mesmo do
+   Synchro (recomendar separar), e se Auth/Firestore já estão habilitados.
+3. Empacotar com Tauri: tauri.conf.json aponta build.devUrl para
    http://localhost:1420 e a API sobe como sidecar.
    ui/src/services/api.js é o ÚNICO arquivo que sabe o endereço do
    servidor; se a comunicação virar invoke() do Tauri, é só ali que muda.

@@ -56,3 +56,26 @@ BRAPI_CACHE_SEGUNDOS = int(os.getenv("FIN_BRAPI_CACHE", "60"))
 
 # Teto de requests individuais quando não há token configurado.
 BRAPI_MAX_SEM_TOKEN = int(os.getenv("FIN_BRAPI_MAX_SEM_TOKEN", "6"))
+
+# ── Geração de subtarefas por IA (api/ia.py) ─────────────────
+# A CHAVE NÃO MORA AQUI. O SDK do Google lê GEMINI_API_KEY do ambiente
+# sozinho; este arquivo só guarda o que é ajuste, não segredo.
+#
+# Modelos possíveis, do mais barato ao mais capaz:
+#   gemini-3.5-flash-lite   o mais rápido e econômico
+#   gemini-3.5-flash        padrão: equilíbrio para passos que a pessoa lê
+#   gemini-3.7-flash        mais recente, melhor julgamento
+# Trocar não exige mexer em código, só na variável de ambiente.
+IA_MODELO = os.getenv("FIN_IA_MODELO", "gemini-3.5-flash")
+
+# Timeout curto: a chamada acontece dentro de um clique na tela, e o
+# padrão do SDK (10 minutos) deixaria a interface pendurada.
+IA_TIMEOUT = int(os.getenv("FIN_IA_TIMEOUT", "60"))
+
+# Teto de subtarefas aceitas por meta, independente do que a IA devolver.
+IA_MAX_SUBTAREFAS = int(os.getenv("FIN_IA_MAX_SUBTAREFAS", "8"))
+
+# Quanto o modelo pensa antes de escrever (MINIMAL, LOW, MEDIUM, HIGH).
+# MEDIUM deixa os passos sob medida para a meta; volte para LOW se o custo
+# começar a pesar.
+IA_THINKING = os.getenv("FIN_IA_THINKING", "MEDIUM")

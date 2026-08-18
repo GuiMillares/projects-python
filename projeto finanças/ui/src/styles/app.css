@@ -1582,6 +1582,519 @@ textarea {
   }
 }
 
+/* ============================================================
+   MODAL DE CONFIRMAÇÃO
+   ============================================================ */
+
+.fin-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 950;
+  background: color-mix(in srgb, var(--fin-bg) 72%, transparent);
+  backdrop-filter: blur(2px);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 0;
+  animation: fin-veu-in 0.14s ease-out both;
+}
+
+@keyframes fin-veu-in {
+  from {
+    opacity: 0;
+  }
+}
+
+/* Mobile: sobe do rodapé, alcance do polegar. Desktop: centralizado. */
+.fin-modal {
+  width: 100%;
+  max-width: 100%;
+  background: var(--fin-surface);
+  border: 1px solid var(--fin-border-mid);
+  border-radius: var(--fin-radius-lg) var(--fin-radius-lg) 0 0;
+  box-shadow: var(--fin-shadow);
+  padding: 18px 16px calc(18px + env(safe-area-inset-bottom));
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  animation: fin-modal-in 0.16s ease-out both;
+}
+
+@keyframes fin-modal-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+}
+
+@media (min-width: 640px) {
+  .fin-modal-overlay {
+    align-items: center;
+    padding: 16px;
+  }
+
+  .fin-modal {
+    max-width: 420px;
+    border-radius: var(--fin-radius-lg);
+    padding: 20px;
+  }
+}
+
+.fin-modal__cab {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.fin-modal__icone {
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  border-radius: var(--fin-radius);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--fin-danger);
+  background: var(--fin-danger-soft);
+}
+
+.fin-modal__titulo {
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.fin-modal__texto {
+  font-size: 12.5px;
+  color: var(--fin-muted);
+  line-height: 1.55;
+}
+
+.fin-modal__acoes {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 2px;
+}
+
+/* ============================================================
+   METAS
+   ============================================================ */
+
+/* Barra de progresso, usada pelo XP do personagem e pelo avanço da meta.
+   A cor sai de --pc quando o pai define uma (patente do personagem);
+   senão cai no acento. */
+.fin-barra {
+  height: 8px;
+  border-radius: 20px;
+  background: var(--fin-bg-3);
+  border: 1px solid var(--fin-border);
+  overflow: hidden;
+}
+
+.fin-barra--fina {
+  height: 5px;
+  margin-top: 2px;
+}
+
+.fin-barra__preenchida {
+  height: 100%;
+  background: var(--pc, var(--fin-accent));
+  border-radius: 20px;
+  transition: width 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ── Personagem ── */
+.fin-heroi {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
+/* Selo do nível. A cor e o ícone vêm do patamar (--pc); a BORDA vem da
+   divisão, como nos emblemas de rank: quanto mais perto do topo do
+   patamar, mais ornamentado o anel.
+
+     IV  anel fino, entrada do patamar
+     III anel cheio, o dobro da espessura
+     II  segundo anel fino, separado por um vão
+     I   anel externo partido em quatro arcos: o topo do patamar
+
+   É a camada intermediária da escada: o patamar muda a cada 20 níveis e
+   os pips a cada 1, então sem isto a faixa de 5 em 5 não teria marca
+   visual nenhuma. Tudo em box-shadow para não mexer no tamanho do
+   círculo (box-sizing global é border-box, então a espessura da borda
+   também não empurra o layout).
+
+   O I não usa brilho para se separar do II: no tema claro o brilho some
+   sobre o fundo bege e os dois ficariam iguais. A diferença é de FORMA,
+   que não depende de contraste.
+
+   Testei também coroa de louros (o símbolo histórico de primeiro lugar,
+   e o que combinaria com os nomes botânicos dos patamares) e raios
+   radiais. O louros foi descartado por medida: abaixo de uns 90px as
+   folhas viram serrilha ilegível e o selo aqui tem 44 a 62px.
+
+   --selo-fundo é a cor do vão entre os dois anéis. Ela precisa ser a cor
+   do que está ATRÁS do selo, senão o vão vira um aro claro. O padrão
+   serve para o card (--fin-surface); quem puser um selo sobre outro
+   fundo sobrescreve a variável no contêiner. */
+.fin-selo {
+  --selo-fundo: var(--fin-surface);
+  position: relative;
+  flex-shrink: 0;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--pc, var(--fin-accent));
+  border: 1px solid var(--pc, var(--fin-accent));
+  background: color-mix(in srgb, var(--pc, var(--fin-accent)) 12%, transparent);
+}
+
+.fin-selo[data-divisao="III"] {
+  border-width: 2px;
+}
+
+.fin-selo[data-divisao="II"] {
+  border-width: 2px;
+  box-shadow:
+    0 0 0 2px var(--selo-fundo),
+    0 0 0 3px color-mix(in srgb, var(--pc, var(--fin-accent)) 55%, transparent);
+}
+
+/* O anel externo do I é partido em quatro arcos, com as falhas nas
+   diagonais. É o único estado que precisa de pseudo-elemento: box-shadow
+   desenha anel inteiro, não arco. A máscara recorta o miolo e deixa só a
+   coroa, então o gradiente não cobre o ícone.
+
+   A falha de baixo-direita cai justamente onde fica o número do nível no
+   herói (.fin-heroi__nivel), então os dois não brigam. */
+.fin-selo[data-divisao="I"] {
+  border-width: 2px;
+}
+
+.fin-selo[data-divisao="I"]::before {
+  content: "";
+  position: absolute;
+  inset: -8px;
+  border-radius: 50%;
+  background: repeating-conic-gradient(
+    from 45deg,
+    var(--pc, var(--fin-accent)) 0deg 76deg,
+    transparent 76deg 90deg
+  );
+  -webkit-mask: radial-gradient(closest-side, transparent 82%, #000 82%);
+  mask: radial-gradient(closest-side, transparent 82%, #000 82%);
+}
+
+/* O selo do herói só acrescenta tamanho ao .fin-selo. */
+.fin-heroi__avatar {
+  width: 62px;
+  height: 62px;
+}
+
+/* O nível fica no próprio avatar, não numa legenda ao lado: é a
+   informação que muda e a que a pessoa procura primeiro. */
+.fin-heroi__nivel {
+  position: absolute;
+  right: -4px;
+  bottom: -4px;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 5px;
+  border-radius: 20px;
+  background: var(--pc, var(--fin-accent));
+  color: var(--fin-bg);
+  font-family: var(--fin-font-num);
+  font-size: 11px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid var(--fin-surface);
+}
+
+.fin-heroi__info {
+  flex: 1;
+  min-width: 0;
+}
+
+.fin-heroi__topo {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.fin-heroi__patente {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--pc, var(--fin-accent));
+}
+
+/* Pips estilo insígnia militar: o grão mais fino da escada, muda a cada
+   nível. Divisão e patamar mudam mais devagar; os pips garantem que nível
+   N e N+1 nunca fiquem visualmente idênticos. */
+.fin-pips {
+  display: inline-flex;
+  gap: 3px;
+}
+
+.fin-pips i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  border: 1px solid var(--pc, var(--fin-accent));
+  background: transparent;
+}
+
+.fin-pips i.cheio {
+  background: var(--pc, var(--fin-accent));
+}
+
+.fin-heroi__sub {
+  font-size: 11.5px;
+  color: var(--fin-muted);
+}
+
+.fin-heroi__falta {
+  font-size: 11.5px;
+  color: var(--fin-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.fin-heroi__escala {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10px;
+  color: var(--fin-muted);
+  margin-top: 4px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Lista de metas ── */
+.fin-metas {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+}
+
+@media (min-width: 900px) {
+  .fin-metas {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.fin-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+/* Meta fechada recua sem sumir: continua no histórico e ainda dá para
+   reabrir, mas não disputa atenção com o que está em aberto. */
+.fin-meta.concluida {
+  opacity: 0.62;
+}
+
+.fin-meta.concluida .fin-meta__titulo {
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+}
+
+.fin-meta__cab {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.fin-meta__titulo-area {
+  flex: 1;
+  min-width: 0;
+}
+
+.fin-meta__titulo {
+  font-size: 13.5px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.fin-meta__desc {
+  font-size: 11.5px;
+  color: var(--fin-muted);
+  margin-top: 2px;
+}
+
+.fin-meta__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  margin-top: 5px;
+  font-size: 11px;
+  color: var(--fin-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.fin-meta__progresso {
+  font-size: 10.5px;
+  color: var(--fin-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.fin-subs {
+  display: flex;
+  flex-direction: column;
+}
+
+.fin-sub {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  border-top: 1px solid var(--fin-border);
+}
+
+.fin-sub:first-child {
+  border-top: none;
+}
+
+.fin-sub__marca {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 12.5px;
+  cursor: pointer;
+  line-height: 1.4;
+}
+
+.fin-sub__marca input {
+  margin-top: 2px;
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  accent-color: var(--fin-accent);
+  cursor: pointer;
+}
+
+.fin-sub__marca .feita {
+  text-decoration: line-through;
+  color: var(--fin-muted);
+}
+
+.fin-sub__xp {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--fin-muted);
+  white-space: nowrap;
+}
+
+.fin-sub__xp svg {
+  color: var(--fin-cat-2);
+}
+
+.fin-sub__excluir {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  border: none;
+  background: none;
+  color: var(--fin-muted);
+  cursor: pointer;
+  padding: 2px;
+  border-radius: 3px;
+  opacity: 0;
+  transition: opacity var(--fin-transition), color var(--fin-transition);
+}
+
+/* Só aparece no hover ou no foco por teclado: um X por linha em cima de
+   uma lista de passos vira ruído. */
+.fin-sub:hover .fin-sub__excluir,
+.fin-sub__excluir:focus-visible {
+  opacity: 1;
+}
+
+.fin-sub__excluir:hover {
+  color: var(--fin-danger);
+}
+
+.fin-sub-nova {
+  display: flex;
+  gap: 6px;
+}
+
+.fin-sub-nova input {
+  flex: 1;
+  min-width: 0;
+  background: var(--fin-bg-3);
+  border: 1px solid var(--fin-border);
+  border-radius: var(--fin-radius);
+  padding: 6px 9px;
+  font-family: inherit;
+  font-size: 12px;
+  color: var(--fin-text);
+  outline: none;
+}
+
+.fin-sub-nova input:focus {
+  border-color: var(--fin-accent);
+  box-shadow: 0 0 0 3px var(--fin-accent-dim);
+}
+
+.fin-meta__acoes {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: auto;
+  padding-top: 4px;
+}
+
+/* Linha com caixa de seleção, usada no formulário de nova meta. */
+.fin-check-linha {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
+.fin-check-linha input {
+  width: 15px;
+  height: 15px;
+  accent-color: var(--fin-accent);
+  cursor: pointer;
+}
+
+.fin-check-linha svg {
+  color: var(--fin-cat-2);
+  flex-shrink: 0;
+}
+
+.fin-check-linha small {
+  color: var(--fin-muted);
+}
+
+.fin-check-linha--off {
+  cursor: not-allowed;
+  color: var(--fin-muted);
+}
+
+.fin-check-linha--off input {
+  cursor: not-allowed;
+}
+
 /* Foto de perfil */
 .fin-foto-row {
   display: flex;

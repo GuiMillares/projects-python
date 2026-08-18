@@ -4,3 +4,7 @@
 Flask==3.1.0
 PyMySQL==1.1.1
 pyotp==2.9.0
+
+# SDK oficial do Google Gemini, usado só em api/ia.py para quebrar metas
+# em subtarefas. A chave vem da variável de ambiente GEMINI_API_KEY.
+google-genai==2.18.1

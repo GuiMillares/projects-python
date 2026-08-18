@@ -2,13 +2,12 @@ import { useEffect, useState } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import AppLayout from "./components/AppLayout";
 import { PerfilProvider } from "./context/PerfilProvider";
-import EmBreve from "./pages/EmBreve";
-import { Target } from "lucide-react";
 import Configuracoes from "./pages/Configuracoes";
 import Dashboard from "./pages/Dashboard";
 import Investimentos from "./pages/Investimentos";
 import Lancamentos from "./pages/Lancamentos";
 import Login from "./pages/Login";
+import Metas from "./pages/Metas";
 import { sessaoValida } from "./services/authService";
 
 /**
@@ -58,16 +57,7 @@ export default function App() {
                     element={<Lancamentos key="despesa" natureza="despesa" />}
                   />
                   <Route path="investimentos" element={<Investimentos />} />
-                  <Route
-                    path="metas"
-                    element={
-                      <EmBreve
-                        titulo="Metas"
-                        icone={Target}
-                        descricao="Objetivos com valor-alvo, prazo e quanto já foi guardado."
-                      />
-                    }
-                  />
+                  <Route path="metas" element={<Metas />} />
                   <Route path="configuracoes" element={<Configuracoes />} />
                   <Route path="*" element={<Navigate to="/app" replace />} />
                 </Routes>
