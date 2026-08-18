@@ -10,10 +10,13 @@ isso `buscar` devolve sempre uma tupla (cotações, aviso) e o aviso é texto
 para exibir, não erro para estourar.
 
 Sobre o token (config.BRAPI_TOKEN):
-  COM token  -> um request só, com todos os tickers de uma vez.
-  SEM token  -> a brapi aceita UM ticker por request e recusa a lista com
-                401 MISSING_TOKEN. O código cai para requests individuais,
-                limitados a BRAPI_MAX_SEM_TOKEN para não martelar a API.
+  COM token  -> um request só, com todos os tickers de uma vez, token no
+                header Authorization: Bearer (é como a v2 da brapi espera;
+                ?token= na query só vale pra ferramentas no-code).
+  SEM token  -> a brapi só responde sem autenticação para um punhado de
+                tickers conhecidos (PETR4, VALE3...) e recusa o resto com
+                401. O código cai para requests individuais, limitados a
+                BRAPI_MAX_SEM_TOKEN para não martelar a API à toa.
 """
 
 import json
@@ -44,25 +47,32 @@ def _guardar(ticker: str, dados: dict):
 
 
 def _traduzir(res: dict) -> dict:
-    """Fica só com o que a tela usa; o payload da brapi tem dezenas de campos."""
+    """Fica só com o que a tela usa; o payload da brapi tem dezenas de campos.
+
+    Na v2 os números vêm dentro de `data`; `symbol` fica no nível de fora.
+    """
+    dados = res.get("data") or {}
     return {
         "ticker": res.get("symbol"),
-        "preco": res.get("regularMarketPrice"),
-        "variacaoDia": res.get("regularMarketChange"),
-        "variacaoDiaPct": res.get("regularMarketChangePercent"),
-        "nome": res.get("longName") or res.get("shortName"),
-        "moeda": res.get("currency") or "BRL",
-        "atualizadoEm": res.get("regularMarketTime"),
+        "preco": dados.get("regularMarketPrice"),
+        "variacaoDia": dados.get("regularMarketChange"),
+        "variacaoDiaPct": dados.get("regularMarketChangePercent"),
+        "nome": dados.get("longName") or dados.get("shortName"),
+        "moeda": dados.get("currency") or "BRL",
+        "atualizadoEm": dados.get("regularMarketTime"),
     }
 
 
 def _chamar(tickers: list[str]) -> list[dict]:
     """Um request à brapi. Levanta em caso de falha; quem trata é `buscar`."""
-    url = f"{config.BRAPI_BASE}/quote/{urllib.parse.quote(','.join(tickers))}"
-    if config.BRAPI_TOKEN:
-        url += f"?token={urllib.parse.quote(config.BRAPI_TOKEN)}"
+    simbolos = urllib.parse.quote(",".join(tickers))
+    url = f"{config.BRAPI_BASE}/v2/stocks/quote?symbols={simbolos}"
 
-    req = urllib.request.Request(url, headers={"User-Agent": "painel-financas/1.0"})
+    headers = {"User-Agent": "painel-financas/1.0"}
+    if config.BRAPI_TOKEN:
+        headers["Authorization"] = f"Bearer {config.BRAPI_TOKEN}"
+
+    req = urllib.request.Request(url, headers=headers)
     with urllib.request.urlopen(req, timeout=config.BRAPI_TIMEOUT) as resp:
         corpo = json.loads(resp.read().decode("utf-8"))
     return corpo.get("results") or []

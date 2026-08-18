@@ -386,6 +386,21 @@ def salvar_orcamentos():
 
 
 # ── Investimentos ────────────────────────────────────────────
+@app.get("/api/cotacoes/<ticker>")
+@exige_sessao()
+def obter_cotacao(ticker):
+    """Cotação de um único ticker, usada pelo formulário para sugerir o
+    preço atual enquanto o usuário digita. Segue a mesma regra de
+    cotacoes.buscar: nunca vira 500, só volta cotação nula com aviso.
+    """
+    ticker = re.sub(r"[^A-Za-z0-9]", "", ticker).upper()[:16]
+    if not ticker:
+        return erro("Informe o ticker.")
+
+    precos, aviso = cotacoes.buscar([ticker])
+    return jsonify({"cotacao": precos.get(ticker), "aviso": aviso})
+
+
 @app.get("/api/investimentos")
 @exige_sessao()
 def listar_investimentos():

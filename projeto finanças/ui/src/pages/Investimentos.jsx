@@ -19,16 +19,21 @@ import {
   Wallet,
   X,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { brl, dataCurta } from "../services/financasService";
 import {
   apagarInvestimento,
+  buscarCotacao,
   calcularPosicao,
   criarInvestimento,
   listarInvestimentos,
   resumoCarteira,
 } from "../services/investimentosService";
+
+/** B3 usa 4 letras + 1 ou 2 dígitos (PETR4, HGLG11...); abaixo disso não
+ * vale a pena consultar a brapi, ainda está no meio da digitação. */
+const TICKER_PRONTO = /^[A-Z]{4}\d{1,2}$/;
 
 const hojeISO = () => new Date().toISOString().slice(0, 10);
 
@@ -63,6 +68,56 @@ export default function Investimentos() {
   const [form, setForm] = useState(formularioVazio);
   const [salvando, setSalvando] = useState(false);
   const [apagando, setApagando] = useState(null);
+
+  const [cotacaoBusca, setCotacaoBusca] = useState({ buscando: false, dados: null, erro: "" });
+  // Guarda o último preço que NÓS preenchemos, não o usuário. Assim, se ele
+  // digitar um preço próprio (o que realmente pagou), a busca seguinte não
+  // atropela a edição dele.
+  const autoPreenchidoRef = useRef({ ticker: "", preco: "" });
+
+  useEffect(() => {
+    const ticker = form.ticker;
+    if (!formAberto || !TICKER_PRONTO.test(ticker)) {
+      setCotacaoBusca({ buscando: false, dados: null, erro: "" });
+      return;
+    }
+
+    let cancelado = false;
+    setCotacaoBusca((c) => ({ ...c, buscando: true }));
+    const timer = setTimeout(async () => {
+      try {
+        const r = await buscarCotacao(ticker);
+        if (cancelado) return; // o campo já mudou, esta resposta está velha
+        setCotacaoBusca({
+          buscando: false,
+          dados: r.cotacao || null,
+          erro: r.cotacao ? "" : r.aviso || "Cotação não encontrada para este ticker.",
+        });
+        if (r.cotacao?.preco != null) {
+          const precoStr = String(r.cotacao.preco);
+          setForm((f) => {
+            if (f.ticker !== ticker) return f;
+            const podeAutoPreencher =
+              f.precoMedio === "" ||
+              (autoPreenchidoRef.current.ticker === ticker &&
+                f.precoMedio === autoPreenchidoRef.current.preco);
+            if (!podeAutoPreencher) return f;
+            autoPreenchidoRef.current = { ticker, preco: precoStr };
+            return { ...f, precoMedio: precoStr };
+          });
+        }
+      } catch {
+        if (!cancelado) {
+          setCotacaoBusca({ buscando: false, dados: null, erro: "Não consegui buscar a cotação agora." });
+        }
+      }
+    }, 500);
+
+    return () => {
+      cancelado = true;
+      clearTimeout(timer);
+    };
+  }, [form.ticker, formAberto]);
 
   const notificar = (msg, tipo = "success") => {
     setToast({ msg, tipo });
@@ -106,6 +161,7 @@ export default function Investimentos() {
     try {
       await criarInvestimento(form);
       setForm(formularioVazio());
+      autoPreenchidoRef.current = { ticker: "", preco: "" };
       setFormAberto(false);
       await carregar();
       notificar("Investimento cadastrado.");
@@ -289,10 +345,24 @@ export default function Investimentos() {
                   min="0"
                   inputMode="decimal"
                   value={form.precoMedio}
-                  onChange={(e) => setForm({ ...form, precoMedio: e.target.value })}
+                  onChange={(e) => {
+                    // Editou na mão: a próxima cotação não pisa mais nesse valor.
+                    autoPreenchidoRef.current = { ticker: "", preco: "" };
+                    setForm({ ...form, precoMedio: e.target.value });
+                  }}
                   placeholder="38,50"
                   required
                 />
+                <span
+                  className="fin-field__hint"
+                  style={cotacaoBusca.erro ? { color: "var(--fin-warn)" } : undefined}
+                >
+                  {cotacaoBusca.buscando
+                    ? "buscando cotação..."
+                    : cotacaoBusca.dados
+                      ? `cotação agora: ${brl(cotacaoBusca.dados.preco)}, ajuste se pagou outro valor`
+                      : cotacaoBusca.erro || "preenchido com a cotação atual ao digitar o ticker"}
+                </span>
               </div>
 
               <div className="fin-field">
@@ -325,6 +395,7 @@ export default function Investimentos() {
                 onClick={() => {
                   setFormAberto(false);
                   setForm(formularioVazio());
+                  autoPreenchidoRef.current = { ticker: "", preco: "" };
                 }}
               >
                 Cancelar

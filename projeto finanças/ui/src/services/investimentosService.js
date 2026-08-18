@@ -13,6 +13,10 @@ export const criarInvestimento = (i) => api.post("/api/investimentos", i);
 
 export const apagarInvestimento = (id) => api.del(`/api/investimentos/${id}`);
 
+/** Cotação de um único ticker, para sugerir o preço enquanto o usuário digita. */
+export const buscarCotacao = (ticker) =>
+  api.get(`/api/cotacoes/${encodeURIComponent(ticker)}`);
+
 /**
  * Números derivados de uma posição.
  *
