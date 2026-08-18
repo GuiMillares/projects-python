@@ -2,7 +2,8 @@ CONTEXTO DO PROJETO: Painel financeiro pessoal
 ==============================================
 Cole este arquivo no Claude Code de casa (ou do trabalho) para retomar o
 trabalho.
-Última atualização: 18/08/2026 (refino das Metas: escada de 300 níveis, modais, abas)
+Última atualização: 18/08/2026 (Fase 1 fechada e commitada: metas com IA,
+escada de 300 níveis com borda por divisão, modais de exclusão, abas)
 
 
 1. O QUE É
@@ -32,11 +33,11 @@ projeto finanças/
     importar_sqlite.py traz o financas.db antigo para o MySQL
   ui/                  React + Vite
     src/pages/         Login, Dashboard, Lancamentos, Investimentos,
-                       Configuracoes, EmBreve
-    src/components/    AppLayout, Charts (SVG próprios)
+                       Metas, Configuracoes
+    src/components/    AppLayout, Charts (SVG próprios), ConfirmarExclusao
     src/services/      api, authService, financasService,
                        investimentosService, metasService, perfilService,
-                       cores, imagem
+                       niveis, cores, imagem
     src/styles/        tokens.css (TODA a cor), app.css (layout)
   financas.py          CLI antiga em SQLite, origem dos dados a importar
   README.md            instruções detalhadas
@@ -246,10 +247,11 @@ Frontend, com Playwright/Chromium em dark+light e desktop+mobile:
   23 asserções na tela de Metas no browser
   Zero erros de runtime, sem rolagem lateral a 320px
 
-NÃO TESTADO: a chamada real ao Gemini. Não havia GEMINI_API_KEY no ambiente
-onde o código foi escrito, então o que foi verificado é tudo em volta dela
-(o que é enviado, o que é feito com a resposta, cada tipo de falha), mas a
-ida à rede em si nunca rodou. É o único trecho sem verificação de execução.
+A CHAMADA REAL AO GEMINI JÁ RODOU (18/08/2026, tarde). A chave foi
+configurada neste PC e duas gerações de verdade foram conferidas à mão: uma
+meta de viagem ao Japão devolveu 6 passos específicos com contas próprias
+(R$ 780 por mês), e o "sugerir mais" devolveu 5 passos totalmente inéditos.
+Zero repetição literal entre as duas levas.
 
 
 9b. METAS E IA
@@ -262,7 +264,8 @@ XP e nível NÃO são gravados: derivam do que está concluído
 A quebra da meta em passos vive em api/ia.py, o ÚNICO arquivo que fala com
 um LLM. Provedor: GOOGLE GEMINI (SDK google-genai), escolhido em 18/08/2026
 por causa do tier gratuito sem cartão. Saída estruturada por JSON schema,
-thinking em nível LOW, modelo padrão gemini-3.5-flash (trocável por
+thinking em nível MEDIUM (FIN_IA_THINKING), modelo padrão gemini-3.5-flash
+(trocável por
 FIN_IA_MODELO: gemini-3.5-flash-lite é mais barato, gemini-3.7-flash é
 melhor).
 
@@ -281,37 +284,130 @@ Gemini (a chave foi configurada neste PC):
 * Escada de níveis: 300 aparências únicas em ui/src/services/niveis.js
   (15 patamares x 4 divisões IV-I x 5 pips, pesquisado em LoL/Duolingo/
   insígnias militares). gamificacao.py trava o nível em NIVEL_MAXIMO=300.
+* A DIVISÃO MUDA A BORDA do selo, não só o texto (.fin-selo em app.css,
+  seletor data-divisao). IV é anel fino, III é anel cheio, II ganha um
+  segundo anel separado por um vão, e I tem o anel externo partido em
+  quatro arcos. São três camadas independentes: patamar (ícone e cor) a
+  cada 20 níveis, divisão (borda) a cada 5, pips a cada 1.
+  Duas decisões desse desenho que NÃO devem ser desfeitas sem medir:
+    - o I não se separa do II por brilho, e sim por FORMA. No tema claro o
+      brilho some sobre o fundo bege e os dois ficavam idênticos.
+    - a falha de baixo-direita do serrilhado cai exatamente onde fica o
+      número do nível (.fin-heroi__nivel). Girar o "from 45deg" faz os
+      dois brigarem.
+  Coroa de louros foi prototipada e DESCARTADA por medida: abaixo de uns
+  90px as folhas viram serrilha ilegível e o selo aqui tem 44 a 62px.
 * Exclusões confirmam num modal (components/ConfirmarExclusao.jsx), usado
   em Metas (meta e passo), Entradas/Saídas e Investimentos. Foco inicial
   no Cancelar; Esc e clique no véu fecham.
 * Metas concluídas vão para a aba "Concluídas" (filtro fin-seg com
   contadores); concluir uma meta a move na hora.
 
->>> PENDENTE: GEMINI_API_KEY ainda não foi configurada. Sem ela a tela
->>> funciona, só que a caixa "sugerir os passos" vem desabilitada
->>> explicando o que falta. Gere em aistudio.google.com/apikey e configure:
->>>   [Environment]::SetEnvironmentVariable("GEMINI_API_KEY","AIza...","User")
->>> A chave NÃO fica em arquivo nenhum do repositório: o SDK a lê do
->>> ambiente sozinho. O SDK também aceita GOOGLE_API_KEY (com precedência),
->>> mas prefira GEMINI_API_KEY para não colidir com outra ferramenta.
+>>> GEMINI_API_KEY JÁ CONFIGURADA NESTE PC (18/08/2026), como variável de
+>>> ambiente permanente do Windows. O valor NÃO está neste arquivo nem em
+>>> nenhum arquivo do repositório: o SDK lê do ambiente sozinho.
+>>>
+>>> Em QUALQUER outro computador isso precisa ser feito de novo, uma vez
+>>> por PC. Gere em aistudio.google.com/apikey e configure:
+>>>   PowerShell (permanente):
+>>>     [Environment]::SetEnvironmentVariable("GEMINI_API_KEY","AIza...","User")
+>>>   Git Bash (permanente):
+>>>     setx GEMINI_API_KEY "AIza..."
+>>>   só na sessão atual:
+>>>     $env:GEMINI_API_KEY = "AIza..."     # PowerShell
+>>>     export GEMINI_API_KEY=AIza...       # Git Bash
+>>> Vale a mesma pegadinha da seção 7: terminal já aberto não enxerga.
+>>> Sem a chave a tela funciona, só que o botão "sugerir os passos" vem
+>>> desabilitado explicando o que falta.
+>>> O SDK também aceita GOOGLE_API_KEY (com precedência), mas prefira
+>>> GEMINI_API_KEY para não colidir com outra ferramenta.
 
 
-10. PRÓXIMOS PASSOS SUGERIDOS
-------------------------------
-1. Configurar GEMINI_API_KEY para ligar a sugestão de passos por IA.
-2. FASE 2 combinada e NÃO iniciada: duplicar o projeto para
-   "projeto financas-firestore/" trocando Flask+MySQL por Firebase Auth +
-   Firestore, com espaços (workspaces) compartilhados para casal e
-   empresas. O projeto atual continua intacto rodando no VPS por mais duas
-   semanas. ANTES de codar essa fase é OBRIGATÓRIO pedir ao dono: as
-   credenciais do SDK web, se é projeto Firebase novo ou o mesmo do
-   Synchro (recomendar separar), e se Auth/Firestore já estão habilitados.
-3. Empacotar com Tauri: tauri.conf.json aponta build.devUrl para
+10. FASE 1: FECHADA
+--------------------
+A Fase 1 (integração real de Entradas/Saídas + tela de Metas gamificada com
+IA) está pronta, testada e commitada. Commit e4c1ecf em main, 18/08/2026.
+Nada dela ficou pendente.
+
+Nit conhecido e NÃO corrigido, por estar fora do que foi pedido: metas já
+concluídas continuam mostrando o campo "Adicionar um passo". Não faz
+sentido convidar a adicionar passo em meta fechada, e levanta a dúvida do
+que aconteceria com o bônus de XP. Ajuste de dois minutos em Metas.jsx.
+
+
+11. FASE 2: BLOQUEADA, NÃO INICIADA
+------------------------------------
+O plano combinado: duplicar o projeto para "projeto financas-firestore/",
+trocando Flask+MySQL por Firebase Auth + Firestore, com espaços
+(workspaces) compartilhados para casal e empresas. O projeto ATUAL continua
+intacto, rodando no VPS emprestado por mais duas semanas.
+
+>>> NÃO ESCREVER UMA LINHA DE FIREBASE ANTES DESTAS TRÊS RESPOSTAS.
+>>> Foi o próprio dono que pediu que fossem exigidas.
+>>>   a) as credenciais do projeto Firebase (o bloco de config do SDK web,
+>>>      igual ao src/firebase.js da Synchro)
+>>>   b) projeto Firebase NOVO ou o mesmo da Synchro. Recomendar separar:
+>>>      o painel de finanças tem dado pessoal e ciclo de vida próprio, e
+>>>      compartilhar projeto é compartilhar console, cotas, regras e log
+>>>      de auditoria com um sistema de cliente. Mas a decisão é dele.
+>>>   c) confirmação de que Auth e Firestore já estão habilitados.
+
+PRÉ-REQUISITO DE CUSTO (levantado em 18/08/2026, o dono ainda não decidiu):
+o desenho depende de Cloud Functions em TRÊS pontos, não um.
+  1. o 2FA, por exigência dele: o segredo TOTP não pode existir no cliente
+  2. a chamada ao Gemini em api/ia.py: a chave não pode ir pro navegador
+  3. o proxy de cotação da brapi: mesmo motivo, o token não pode vazar
+Cloud Functions EXIGE o plano Blaze, ou seja, cartão cadastrado. O uso
+previsto cabe folgado na cota gratuita, mas o cartão é obrigatório. Se isso
+for problema, o desenho muda e precisa ser conversado ANTES de começar.
+
+O QUE NÃO PORTA DIRETO (levantado lendo o código atual, 28 rotas em app.py):
+
+* SESSÃO DE DOIS ESTÁGIOS. Hoje é a tabela `sessoes` com a coluna
+  dois_fatores_ok, e o token trafega como hash SHA-256. Vira Firebase Auth
+  mais um custom claim marcando que o 2FA passou. Isso mexe no ExigeSessao
+  do ui/src/App.jsx E no decorador @exige_sessao das 28 rotas.
+  ATENÇÃO: o TOTP NÃO deve ser reimplementado a partir de seguranca.py. Vai
+  para Cloud Function, seguindo o padrão do LoginAdmin.jsx da Synchro.
+  (Cuidado: o ConfiguracoesAdmin.jsx da Synchro NÃO segue esse padrão, ele
+  gera e valida o segredo no browser. É uma inconsistência da Synchro, já
+  apontada ao dono. Copiar o Login, nunca o Configurações.)
+
+* FOTO DE PERFIL. Hoje é data URL em MEDIUMTEXT, limitada a 400 KB
+  (FOTO_MAX_BYTES em app.py). Documento do Firestore tem teto de 1 MiB,
+  então até cabe, mas é desperdício gravar imagem dentro do documento que a
+  tela lê a cada carga. O certo é Firebase Storage, que é uma peça a mais
+  nas regras e no fluxo.
+
+* ESPAÇOS COMPARTILHADOS. É a mudança mais profunda e não é só um campo
+  novo. Hoje TODA rota filtra por usuario_id. Passar a filtrar por espacoId
+  faz a posse deixar de ser um número na linha e virar uma consulta de
+  associação, tanto no código quanto no firestore.rules. É aqui que mora o
+  risco real de vazar dado entre espaços: CONCENTRAR OS TESTES AQUI.
+  Modelo combinado: coleção `espacos` com membros (papel dono/membro), e
+  transações/metas/orçamentos referenciando espacoId em vez do usuário. A
+  UI precisa de um seletor de espaço.
+
+BOA NOTÍCIA: o dashboard já agrega NO CLIENTE. Não existe um GROUP BY ou
+SUM em app.py. Essa costuma ser a parte mais dolorosa de migrar pra
+Firestore, porque Firestore não agrupa. Aqui já está do jeito que a
+migração precisa.
+
+
+12. OUTROS PRÓXIMOS PASSOS (independentes da Fase 2)
+-----------------------------------------------------
+1. Empacotar com Tauri: tauri.conf.json aponta build.devUrl para
    http://localhost:1420 e a API sobe como sidecar.
    ui/src/services/api.js é o ÚNICO arquivo que sabe o endereço do
    servidor; se a comunicação virar invoke() do Tauri, é só ali que muda.
-3. Editar lançamento existente (hoje só cria e exclui).
+2. Editar lançamento existente (hoje só cria e exclui).
+3. Esconder o "Adicionar um passo" nas metas concluídas (ver seção 10).
 
 Feito em 17/08/2026: token da brapi gerado e configurado (ver seção 8),
 API corrigida pra v2 da brapi, e o formulário de investimento agora sugere
 o preço médio a partir da cotação ao vivo do ticker digitado.
+
+Feito em 18/08/2026: Fase 1 inteira (metas com subtarefas por IA via
+Gemini, escada de 300 níveis com borda por divisão, modais de confirmação
+de exclusão, aba de concluídas), GEMINI_API_KEY configurada e a geração
+validada com chamada real. Commit e4c1ecf.
