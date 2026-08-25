@@ -1,0 +1,17 @@
+.venv/
+__pycache__/
+*.pyc
+
+# ── Credenciais do Google ───────────────────────────────────────────────
+# A regra por NOME EXATO (credenciais_google.json) não bastou: o arquivo
+# que o console do Google entrega vem com o nome gerado por ele, no
+# formato <projeto>-<hash>.json, e escapou do ignore. Foi assim que uma
+# chave de service account entrou num commit em 25/08/2026 (o push
+# protection do GitHub barrou antes de virar público).
+# Agora a regra é por FORMATO, não por nome.
+credenciais_google.json
+*-[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]*.json
+service_account*.json
+*service-account*.json
+client_secret*.json
+.env

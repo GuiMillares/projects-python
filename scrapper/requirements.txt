@@ -1,0 +1,8 @@
+streamlit
+gspread
+google-auth
+scikit-learn
+pypdf
+python-docx
+playwright
+python-jobspy>=1.1.82
