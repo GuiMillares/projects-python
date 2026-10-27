@@ -37,18 +37,18 @@ const NIVEIS_POR_DIVISAO = 5;
 const PEDRAS = [
   ["Quartzo", "Hexagon"],
   ["Ágata", "Hexagon"],
-  ["Malaquita", "Hexagon"],
-  ["Âmbar", "Hexagon"],
+  ["Ametista", "Hexagon"],
   ["Citrino", "Hexagon"],
+  ["Granada", "Hexagon"],
   ["Peridoto", "Diamond"],
-  ["Granada", "Diamond"],
+  ["Água-marinha", "Diamond"],
   ["Turmalina", "Diamond"],
   ["Topázio", "Diamond"],
-  ["Opala", "Diamond"],
+  ["Tanzanita", "Diamond"],
   ["Esmeralda", "Gem"],
+  ["Safira", "Gem"],
   ["Rubi", "Gem"],
   ["Diamante", "Gem"],
-  ["Diamante Rosa", "Gem"],
   ["Diamante Vermelho", "Gem"],
 ];
 
