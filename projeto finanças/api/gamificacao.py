@@ -7,9 +7,23 @@ continuar lá), e o cálculo é barato o bastante para rodar a cada carga.
 
 Funções puras de propósito: recebem números, devolvem números, não tocam o
 banco. Isso deixa a curva de nível testável sem servidor no ar.
+
+DIFICULDADE (desde 27/10/2026). Meta com valor ganha um multiplicador
+sobre o XP dos passos e do bônus, pelo PESO que ela tem no mês de quem a
+fez: parcela mensal (valor ÷ meses entre a criação e o prazo) dividida
+pela renda mensal média da própria pessoa. O mesmo valor com metade do
+prazo pesa o dobro. É por renda e não por reais porque cada pessoa usa o
+app sozinha: R$ 3 mil por mês é épico para um e simples para outro. Sem
+renda registrada ainda, a parcela é comparada com faixas fixas em reais.
+Meta sem valor fica no padrão (x1).
+
+O multiplicador de meta CONCLUÍDA é congelado no banco na hora da
+conclusão (metas.multiplicador): a renda muda todo mês, e o XP de algo que
+já foi feito não pode mudar junto.
 """
 
 import math
+from datetime import date
 
 # XP mínimo do bônus de uma meta sem subtarefa nenhuma. Concluir uma meta
 # que você escreveu e cumpriu sozinho ainda vale alguma coisa.
@@ -29,10 +43,69 @@ XP_POR_DEGRAU = 100
 # pararia de ter representação visual, então o nível para de subir aqui.
 NIVEL_MAXIMO = 300
 
+# (teto do peso na renda, teto da parcela em reais, multiplicador, nome).
+# A última faixa não tem teto. O x2,5 é o limite de propósito: sem ele,
+# uma meta absurda de curto prazo viraria atalho para subir de nível.
+FAIXAS = [
+    (0.05, 150, 1.0, "simples"),
+    (0.15, 500, 1.25, "moderada"),
+    (0.30, 1200, 1.5, "puxada"),
+    (0.60, 2500, 2.0, "difícil"),
+    (None, None, 2.5, "épica"),
+]
 
-def bonus_da_meta(soma_xp_subtarefas: int) -> int:
-    """Bônus por concluir a meta inteira. Sempre > a soma das subtarefas."""
-    return max(BONUS_MINIMO, math.ceil(soma_xp_subtarefas * FATOR_BONUS))
+# Meta com valor e sem prazo é medida como se fosse para um ano.
+MESES_SEM_PRAZO = 12
+
+# Concluir até o prazo rende 25% a mais no bônus. Atrasar não tira nada.
+BONUS_PONTUAL = 1.25
+
+
+def dificuldade(alvo, prazo, criada_em, renda_mensal) -> dict:
+    """Quanto a meta pesa e o multiplicador que isso dá.
+
+    `criada_em` e não hoje como início: medir até hoje faria a meta ficar
+    mais "difícil" sozinha a cada dia que passa sem ninguém fazer nada.
+    """
+    if not alvo or float(alvo) <= 0:
+        return {"nome": "simples", "multiplicador": 1.0, "parcelaMensal": None, "peso": None, "base": None}
+
+    inicio = criada_em.date() if hasattr(criada_em, "date") else (criada_em or date.today())
+    meses = max(1.0, (prazo - inicio).days / 30.44) if prazo else MESES_SEM_PRAZO
+    parcela = float(alvo) / meses
+
+    if renda_mensal and renda_mensal > 0:
+        peso, base, medida, coluna = parcela / renda_mensal, "renda", parcela / renda_mensal, 0
+    else:
+        peso, base, medida, coluna = None, "reais", parcela, 1
+
+    for faixa in FAIXAS:
+        teto = faixa[coluna]
+        if teto is None or medida <= teto:
+            return {
+                "nome": faixa[3],
+                "multiplicador": faixa[2],
+                "parcelaMensal": round(parcela, 2),
+                "peso": round(peso, 3) if peso is not None else None,
+                "base": base,
+            }
+
+
+def xp_com_dificuldade(xp: int, multiplicador: float) -> int:
+    return round(xp * multiplicador)
+
+
+def bonus_da_meta(soma_xp_subtarefas: int, multiplicador: float = 1.0, pontual: bool = False) -> int:
+    """Bônus por concluir a meta inteira. Sempre > a soma das subtarefas.
+
+    `soma_xp_subtarefas` é a soma SEM multiplicador: o multiplicador entra
+    uma vez só, aqui, igual entra uma vez em cada passo. Assim o bônus
+    continua 1,5x a soma do que os passos realmente rendem.
+    """
+    bonus = max(BONUS_MINIMO, soma_xp_subtarefas * FATOR_BONUS) * multiplicador
+    if pontual:
+        bonus *= BONUS_PONTUAL
+    return math.ceil(bonus)
 
 
 def xp_acumulado_ate(nivel: int) -> int:
@@ -101,11 +174,15 @@ def calcular_xp(metas: list) -> int:
     Cada subtarefa concluída vale o próprio XP; cada meta concluída vale o
     bônus por cima. Meta concluída NÃO implica subtarefas concluídas: quem
     marcou a meta sem marcar os passos ganha só o bônus, e é coerente.
+
+    Espera o formato de app._carregar_metas: `xp` dos passos e `bonusXp`
+    já com a dificuldade aplicada. Sem `bonusXp`, calcula no padrão x1.
     """
     total = 0
     for meta in metas:
         subs = meta.get("subtarefas") or []
         total += sum(s["xp"] for s in subs if s["concluida"])
         if meta["concluida"]:
-            total += bonus_da_meta(sum(s["xp"] for s in subs))
+            bonus = meta.get("bonusXp")
+            total += bonus if bonus is not None else bonus_da_meta(sum(s["xp"] for s in subs))
     return total

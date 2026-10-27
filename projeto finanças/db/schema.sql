@@ -161,6 +161,9 @@ CREATE TABLE IF NOT EXISTS metas (
   prazo       DATE            NULL,
   concluida   TINYINT(1)      NOT NULL DEFAULT 0,
   concluida_em DATETIME       NULL,
+  -- Multiplicador de dificuldade congelado na conclusão (gamificacao.py).
+  -- NULL em meta aberta: aí ele é calculado na hora, pela renda atual.
+  multiplicador DECIMAL(3,2)  NULL,
   criado_em   DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
   KEY ix_metas_usuario (usuario_id),

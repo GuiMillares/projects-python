@@ -170,6 +170,19 @@ SET @sql := IF(@falta,
   'SELECT "transacoes.ignorada já existe" AS aviso');
 PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 
+-- 2026-10: dificuldade das metas. O multiplicador é congelado quando a
+-- meta é concluída; meta concluída antes disto fica NULL e vale x1, para
+-- não inflar XP de algo antigo retroativamente.
+SET @falta := (
+  SELECT COUNT(*) = 0 FROM information_schema.COLUMNS
+   WHERE TABLE_SCHEMA = 'local_finance' AND TABLE_NAME = 'metas'
+     AND COLUMN_NAME = 'multiplicador'
+);
+SET @sql := IF(@falta,
+  'ALTER TABLE metas ADD COLUMN multiplicador DECIMAL(3,2) NULL AFTER concluida_em',
+  'SELECT "metas.multiplicador já existe" AS aviso');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
 -- Regra "descrição contém X vira categoria Y", aplicada a cada importação.
 -- `padrao` fica normalizado (minúsculo, sem acento) para casar com o
 -- mesmo texto que o Python gera.

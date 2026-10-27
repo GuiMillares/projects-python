@@ -412,6 +412,22 @@ A Fase 1 (integração real de Entradas/Saídas + tela de Metas gamificada com
 IA) está pronta, testada e commitada. Commit e4c1ecf em main, 18/08/2026.
 Nada dela ficou pendente.
 
+DIFICULDADE DAS METAS (27/10/2026), regras em api/gamificacao.py:
+* Peso = (alvo ÷ meses entre criação e prazo) ÷ renda mensal média da
+  PRÓPRIA pessoa (entradas dos 3 meses fechados, dividido pelos meses com
+  lançamento). Cada pessoa usa o app sozinha, por isso é por renda.
+* Faixas: até 5% x1 simples, 15% x1,25 moderada, 30% x1,5 puxada, 60% x2
+  difícil, acima x2,5 épica (teto de propósito, contra meta absurda de
+  curto prazo virar atalho de nível). Sem renda: faixas em reais por mês.
+  Sem valor: x1. Sem prazo: 12 meses.
+* Multiplica o XP de cada passo e o bônus da meta. Concluir até o prazo:
+  +25% no bônus. A API já manda `xp` e `bonusXp` multiplicados (`xpBase`
+  é o original), então a tela só soma.
+* metas.multiplicador congela na conclusão (a renda muda todo mês); reabrir
+  solta. Concluída antes disso (NULL) vale x1, sem inflar o passado.
+* Selo "épica x2,5" e "+25% no prazo" no card; o title explica a conta.
+* 24 asserções (regras puras + rotas com usuário descartável).
+
 Nit conhecido e NÃO corrigido, por estar fora do que foi pedido: metas já
 concluídas continuam mostrando o campo "Adicionar um passo". Não faz
 sentido convidar a adicionar passo em meta fechada, e levanta a dúvida do

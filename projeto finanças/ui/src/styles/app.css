@@ -1466,6 +1466,12 @@ textarea {
   border-color: var(--fin-warn);
 }
 
+.fin-tag--dificuldade {
+  color: var(--tc);
+  border-color: var(--tc);
+  font-weight: 700;
+}
+
 /* Lançamento marcado como "não conta": continua na lista, apagado. */
 .fin-lanc-item--ignorada .fin-lanc-item__nome,
 .fin-lanc-item--ignorada .fin-lanc-item__valor {

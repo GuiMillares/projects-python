@@ -531,13 +531,14 @@ def _carregar_metas(usuario_id):
     """
     metas = buscar_todos(
         "SELECT id, titulo, descricao, alvo, guardado, prazo, concluida, "
-        "       concluida_em, criado_em "
+        "       concluida_em, multiplicador, criado_em "
         "  FROM metas WHERE usuario_id = %s "
         " ORDER BY concluida, COALESCE(prazo, '9999-12-31'), id",
         (usuario_id,),
     )
     if not metas:
         return []
+    renda = _renda_mensal(usuario_id)
 
     ids = [m["id"] for m in metas]
     marcadores = ",".join(["%s"] * len(ids))
@@ -550,26 +551,78 @@ def _carregar_metas(usuario_id):
 
     por_meta = {i: [] for i in ids}
     for s in subs:
-        por_meta[s["meta_id"]].append({
-            "id": s["id"],
-            "titulo": s["titulo"],
-            "concluida": bool(s["concluida"]),
-            "xp": int(s["xp"]),
-            "ordem": int(s["ordem"]),
-            "geradaPorIa": bool(s["gerada_por_ia"]),
-        })
+        por_meta[s["meta_id"]].append(s)
 
-    return [{
-        "id": m["id"],
-        "titulo": m["titulo"],
-        "descricao": m["descricao"],
-        "alvo": float(m["alvo"]) if m["alvo"] is not None else None,
-        "guardado": float(m["guardado"]),
-        "prazo": m["prazo"].isoformat() if isinstance(m["prazo"], date) else m["prazo"],
-        "concluida": bool(m["concluida"]),
-        "subtarefas": por_meta[m["id"]],
-        "bonusXp": gamificacao.bonus_da_meta(sum(s["xp"] for s in por_meta[m["id"]])),
-    } for m in metas]
+    hoje = date.today()
+    saida = []
+    for m in metas:
+        dif = _dificuldade_da_meta(m, renda)
+        mult = dif["multiplicador"]
+        prazo = m["prazo"]
+        # Concluída: pontual se fechou até o prazo. Aberta: o bônus mostrado
+        # já conta a pontualidade enquanto o prazo ainda não passou, porque
+        # é o que ela vai render se for concluída agora.
+        if m["concluida"]:
+            pontual = bool(prazo and m["concluida_em"] and m["concluida_em"].date() <= prazo)
+        else:
+            pontual = bool(prazo and hoje <= prazo)
+        base = [int(s["xp"]) for s in por_meta[m["id"]]]
+
+        saida.append({
+            "id": m["id"],
+            "titulo": m["titulo"],
+            "descricao": m["descricao"],
+            "alvo": float(m["alvo"]) if m["alvo"] is not None else None,
+            "guardado": float(m["guardado"]),
+            "prazo": prazo.isoformat() if isinstance(prazo, date) else prazo,
+            "concluida": bool(m["concluida"]),
+            "dificuldade": dif,
+            "pontual": pontual,
+            # `xp` já vem com a dificuldade: a tela soma direto. `xpBase` é
+            # o que a IA (ou a pessoa) deu, antes do multiplicador.
+            "subtarefas": [{
+                "id": s["id"],
+                "titulo": s["titulo"],
+                "concluida": bool(s["concluida"]),
+                "xp": gamificacao.xp_com_dificuldade(int(s["xp"]), mult),
+                "xpBase": int(s["xp"]),
+                "ordem": int(s["ordem"]),
+                "geradaPorIa": bool(s["gerada_por_ia"]),
+            } for s in por_meta[m["id"]]],
+            "bonusXp": gamificacao.bonus_da_meta(sum(base), mult, pontual),
+        })
+    return saida
+
+
+def _renda_mensal(usuario_id):
+    """Média das entradas nos últimos 3 meses fechados, só dos meses em que
+    o app foi usado (com algum lançamento). Dividir por 3 sempre puniria
+    quem começou a usar há um mês. Sem nada registrado, devolve None e a
+    dificuldade cai na escala em reais."""
+    hoje = date.today()
+    fim = hoje.replace(day=1)
+    inicio = fim
+    for _ in range(3):
+        inicio = (inicio - timedelta(days=1)).replace(day=1)
+
+    linhas = buscar_todos(
+        "SELECT data, natureza, valor FROM transacoes "
+        "WHERE usuario_id = %s AND ignorada = 0 AND data >= %s AND data < %s",
+        (usuario_id, inicio, fim),
+    )
+    meses = {(l["data"].year, l["data"].month) for l in linhas}
+    entradas = sum(float(l["valor"]) for l in linhas if l["natureza"] == "receita")
+    return entradas / len(meses) if meses and entradas > 0 else None
+
+
+def _dificuldade_da_meta(m, renda):
+    """Congelada na conclusão; calculada na hora enquanto a meta está aberta.
+    Concluída antes de existir o multiplicador (NULL) vale x1."""
+    if m["concluida"]:
+        congelado = float(m["multiplicador"]) if m["multiplicador"] is not None else 1.0
+        nome = next((f[3] for f in gamificacao.FAIXAS if f[2] == congelado), "simples")
+        return {"nome": nome, "multiplicador": congelado, "parcelaMensal": None, "peso": None, "base": None}
+    return gamificacao.dificuldade(m["alvo"], m["prazo"], m["criado_em"], renda)
 
 
 def _meta_do_usuario(meta_id, usuario_id):
@@ -757,8 +810,18 @@ def atualizar_meta(meta_id):
 
     if "concluida" in d:
         concluida = bool(d["concluida"])
-        campos += ["concluida = %s", "concluida_em = %s"]
-        valores += [int(concluida), datetime.now() if concluida else None]
+        # Congela o multiplicador de agora; reabrir solta, e ele volta a
+        # ser calculado pela renda do momento.
+        multiplicador = None
+        if concluida:
+            m = buscar_um(
+                "SELECT alvo, prazo, criado_em FROM metas WHERE id = %s", (meta_id,)
+            )
+            multiplicador = gamificacao.dificuldade(
+                m["alvo"], m["prazo"], m["criado_em"], _renda_mensal(g.sessao["usuario_id"])
+            )["multiplicador"]
+        campos += ["concluida = %s", "concluida_em = %s", "multiplicador = %s"]
+        valores += [int(concluida), datetime.now() if concluida else None, multiplicador]
 
     if "guardado" in d:
         try:

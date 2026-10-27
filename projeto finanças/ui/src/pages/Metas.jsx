@@ -552,6 +552,7 @@ export default function Metas() {
                       {meta.alvo != null && <span>{brl(meta.alvo)}</span>}
                       {meta.prazo && <span>até {meta.prazo.split("-").reverse().join("/")}</span>}
                       {!meta.concluida && <span>+{p.xpRestante} XP disponíveis</span>}
+                      <SeloDificuldade d={meta.dificuldade} pontual={!meta.concluida && meta.pontual} />
                     </div>
                   </div>
 
@@ -683,6 +684,51 @@ export default function Metas() {
         <div className={`fin-toast fin-toast--${toast.tipo}`} role="status">
           {toast.msg}
         </div>
+      )}
+    </>
+  );
+}
+
+// A cor sobe junto com a dificuldade: do neutro ao vermelho-tijolo.
+const COR_DIFICULDADE = {
+  simples: "var(--fin-muted)",
+  moderada: "var(--fin-accent)",
+  puxada: "var(--fin-warn)",
+  difícil: "var(--fin-out)",
+  épica: "var(--fin-danger)",
+};
+
+const multiplicadorTexto = (m) => `×${String(m).replace(".", ",")}`;
+
+/**
+ * Quanto a meta vale a mais e por quê. Meta simples sem prazo não mostra
+ * nada: é o padrão, e um selo em toda meta viraria ruído.
+ */
+function SeloDificuldade({ d, pontual }) {
+  if (!d || (d.multiplicador === 1 && !pontual)) return null;
+
+  const porque =
+    d.parcelaMensal == null
+      ? "Multiplicador congelado quando a meta foi concluída."
+      : d.base === "renda"
+        ? `${brl(d.parcelaMensal)} por mês, ${Math.round(d.peso * 100)}% da sua renda média.`
+        : `${brl(d.parcelaMensal)} por mês. Ainda sem entradas registradas para comparar com a sua renda.`;
+
+  return (
+    <>
+      {d.multiplicador > 1 && (
+        <span
+          className="fin-tag fin-tag--dificuldade"
+          style={{ "--tc": COR_DIFICULDADE[d.nome] }}
+          title={`${porque} O XP dos passos e do bônus vale ${multiplicadorTexto(d.multiplicador)}.`}
+        >
+          {d.nome} {multiplicadorTexto(d.multiplicador)}
+        </span>
+      )}
+      {pontual && (
+        <span className="fin-tag" title="Concluir até o prazo rende 25% a mais no bônus da meta.">
+          +25% no prazo
+        </span>
       )}
     </>
   );
