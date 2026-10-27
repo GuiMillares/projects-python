@@ -229,6 +229,94 @@ campo na mão tem prioridade e para o preenchimento automático: é o preço
 que a pessoa realmente pagou que importa, não o preço de agora.
 
 
+8b. OPEN FINANCE (Pluggy, via Meu Pluggy), 27/10/2026
+------------------------------------------------------
+Tela "Contas" (/app/contas): saldo de cada conta, fatura atual, faturas
+anteriores e projeção das próximas por cartão, e importação das transações
+para Entradas/Saídas.
+
+O app NÃO fala com os bancos: Open Finance só entrega dado a instituição
+autorizada pelo BC. As contas são conectadas no meu.pluggy.ai e o app lê
+pela API da Pluggy. api/openfinance.py é o ÚNICO arquivo que fala com ela,
+com o mesmo contrato de cotacoes.py: (dados, aviso), nunca exceção.
+
+* Banco guarda só o id da conexão (tabela conexoes_bancarias). Saldo e
+  fatura são lidos na hora, cache de 60s, sem cache durante sincronização.
+* "Tempo real" = o que o banco entregou na última sincronização. O botão
+  Sincronizar faz PATCH /items/{id} e a tela relê a cada 5s até terminar.
+* Faturas FUTURAS são projeção: o Open Finance não as entrega. Vem da
+  parcela mais recente de cada compra parcelada (agrupada tirando o
+  "PARC 03/10" da descrição, senão a projeção dobrava).
+* Importação: transacoes.origem_id + UNIQUE (usuario_id, origem_id), dá pra
+  reimportar sem duplicar. Fica de fora: pagamento de fatura (a compra do
+  cartão já entra), transferência entre contas do mesmo CPF e pendentes.
+* 40 asserções contra uma Pluggy simulada (rotas reais + MySQL). O teste
+  cria um usuário descartável e apaga só ele no fim. Uma versão anterior
+  usava o primeiro usuário do banco e apagou as conexões reais (que foram
+  recolocadas): teste NUNCA roda sobre usuário de verdade.
+* Transações vêm de GET /v2/transactions, paginado por cursor (`next`). O
+  /transactions antigo responde 410.
+* Investimentos: GET /investments?itemId=, só os ativos com saldo. Entra o
+  `balance` (líquido de IR/IOF), não o bruto.
+
+VISÃO GERAL COM BANCO CONECTADO:
+* Ao abrir, importa sozinha o que entrou nos bancos (no máximo a cada 15
+  min, controle em memória no openfinanceService). Não espera a Pluggy para
+  desenhar: mostra o local e atualiza quando a importação termina.
+* KPI de saldo = soma das contas. A curva de evolução é deslocada para
+  terminar em (contas - faturas abertas), porque a compra no cartão já é
+  saída nos lançamentos antes de sair da conta.
+* Card Patrimônio: contas + investimentos dos bancos + carteira B3 (preço
+  de mercado, ou preço médio sem cotação) - faturas abertas.
+* Faturas que vencem em até 10 dias entram em "Precisa de atenção". Fatura
+  vencida não entra: o Open Finance não diz se foi paga.
+* Testado na mão (27/10/2026) um pareamento de transferências entre as
+  próprias contas por valor+data: só achou coincidências. A categoria
+  "same person" da Pluggy já resolve; não vale implementar.
+
+FASE 1 "NÚMEROS CERTOS" (27/10/2026)
+* Pagamento de fatura do lado da conta: há banco que manda só o próprio
+  nome, com categoria "Loans" ou "Bank fees", e contava como despesa em
+  cima das compras do cartão. openfinance._descartar_pares
+  casa o pagamento recebido no cartão com o débito de mesmo valor em outra
+  conta (até 5 dias). SÓ o pagamento do cartão procura par: transferência
+  "same person" sozinha procurando par levava junto imposto e boleto de
+  mesmo valor.
+* Também saem: parcelamento de fatura cobrado no cartão ("Credit card
+  payment" como saída) e "Transfer - Internal" (Pix no crédito).
+* Cada importação DELETA do banco os origem_id que a regra atual descarta:
+  mudar a regra corrige o histórico sozinho na próxima importação.
+* transacoes ganhou ignorada ("não conta"), meio (conta/cartao) e
+  categoria_manual. Tabela regras_categoria ("descrição contém X vira Y",
+  padrão normalizado sem acento). Regra nunca passa por cima de
+  categoria_manual. Reimportar só atualiza `meio` de linha existente.
+* Front: TODO cálculo usa contaveis(lista). Entradas/Saídas mostra as
+  ignoradas riscadas para poder desmarcar.
+* ui/src/services/previsaoService.js: recorrentes (3+ dos 6 meses fechados,
+  ou "nova" nos 2 últimos com mesmo valor), aviso de "subiu" só para o que
+  era estável, previsão do fim do mês. Recorrente no CARTÃO não desconta da
+  previsão: vai para a fatura, que entra pelo valor do banco.
+* Orçamento sugerido = média dos 3 meses fechados, arredondada para cima.
+* 55 asserções no teste do Open Finance (usuário descartável). Telas
+  conferidas no Chromium em 1366px e 390px, sem erro de JS e sem rolagem
+  lateral.
+
+* Conectar é pelo widget Pluggy Connect (react-pluggy-connect): a API gera
+  o connect token em POST /api/openfinance/connect-token e o widget devolve
+  o item id, que é gravado sozinho. A API da Pluggy NÃO lista items, então
+  sem o widget o id teria que ser caçado no painel. Com conexaoId o mesmo
+  widget reconecta (consentimento expirado). includeSandbox fica false.
+* WEBHOOK NÃO foi feito, de propósito: a API só escuta em 127.0.0.1 e a
+  Pluggy não alcança sem túnel público. A tela relê o status a cada 5s.
+  Reavaliar quando/se o app for para servidor.
+
+>>> CREDENCIAIS: FIN_PLUGGY_CLIENT_ID e FIN_PLUGGY_CLIENT_SECRET no arquivo
+>>> "projeto finanças/.env" (está no .gitignore), lido por api/config.py.
+>>> Variável de ambiente do Windows com o mesmo nome ganha do .env.
+>>> Validadas contra a Pluggy real em 27/10/2026. Em outro PC, copiar o
+>>> .env à mão (ele não vai pelo git).
+
+
 9. O QUE JÁ FOI TESTADO
 ------------------------
 Backend, ponta a ponta contra a API rodando:

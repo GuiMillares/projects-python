@@ -793,6 +793,14 @@ textarea {
   color: var(--fin-danger);
 }
 
+/* Atalho para telas que ficam fora da barra de baixo. No desktop a
+   sidebar já mostra todas, então o atalho sai do menu. */
+@media (min-width: 900px) {
+  .fin-menu__item--mobile {
+    display: none;
+  }
+}
+
 .fin-menu__item--exit:hover {
   background: var(--fin-danger-soft);
 }
@@ -1063,6 +1071,64 @@ textarea {
   grid-template-columns: minmax(0, 1fr);
 }
 
+/* ── Patrimônio (visão geral) ── */
+.fin-patri {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px 16px;
+}
+
+.fin-patri__item {
+  min-width: 0;
+}
+
+/* No celular o total ocupa a linha toda, abaixo de um fio: é a resposta,
+   as outras células são a conta que leva até ela. */
+.fin-patri__item--total {
+  grid-column: 1 / -1;
+  padding-top: 12px;
+  border-top: 1px solid var(--fin-border);
+}
+
+.fin-patri__lbl {
+  font-size: 11px;
+  color: var(--fin-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.fin-patri__val {
+  font-family: var(--fin-font-num);
+  font-variant-numeric: tabular-nums;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--pc, var(--fin-text));
+  margin: 3px 0 2px;
+  white-space: nowrap;
+}
+
+.fin-patri__sub {
+  font-size: 10.5px;
+  color: var(--fin-muted);
+}
+
+@media (min-width: 900px) {
+  .fin-patri {
+    grid-template-columns: none;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(0, 1fr);
+  }
+
+  .fin-patri__item--total {
+    grid-column: auto;
+    padding-top: 0;
+    border-top: 0;
+    padding-left: 16px;
+    border-left: 1px solid var(--fin-border);
+  }
+}
+
 @media (min-width: 900px) {
   .fin-grid-2--even {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1324,9 +1390,13 @@ textarea {
 .fin-lanc-item {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto auto;
-  grid-template-areas: "info valor excluir";
+  /* A data mora embaixo do valor: sem esta segunda linha ela não tinha
+     área no grid e caía sozinha numa faixa extra, à direita. */
+  grid-template-areas:
+    "info valor excluir"
+    "info data  excluir";
   align-items: center;
-  gap: 6px 10px;
+  gap: 2px 10px;
   padding: 10px 15px;
   border-top: 1px solid var(--fin-border);
   transition: background var(--fin-transition);
@@ -1343,6 +1413,7 @@ textarea {
   font-size: 11.5px;
   color: var(--fin-muted);
   white-space: nowrap;
+  justify-self: end;
 }
 
 .fin-lanc-item__info {
@@ -1384,6 +1455,62 @@ textarea {
   font-size: 10px;
   color: var(--fin-muted);
   white-space: nowrap;
+}
+
+.fin-list__meta .fin-tag {
+  margin-left: 6px;
+}
+
+.fin-tag--alerta {
+  color: var(--fin-warn);
+  border-color: var(--fin-warn);
+}
+
+/* Lançamento marcado como "não conta": continua na lista, apagado. */
+.fin-lanc-item--ignorada .fin-lanc-item__nome,
+.fin-lanc-item--ignorada .fin-lanc-item__valor {
+  opacity: 0.5;
+  text-decoration: line-through;
+}
+
+/* A descrição é o botão que abre o editor: alvo grande no celular. */
+.fin-lanc-item__abrir {
+  background: none;
+  border: 0;
+  padding: 0;
+  text-align: left;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.fin-lanc-item__abrir .fin-lanc-item__nome {
+  display: block;
+}
+
+/* Editor que abre embaixo do lançamento tocado. */
+.fin-lanc-editor {
+  padding: 12px 15px 14px;
+  border-top: 1px dashed var(--fin-border);
+  background: var(--fin-bg-3);
+}
+
+.fin-lanc-editor__linha {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  margin-top: 10px;
+}
+
+.fin-lanc-editor__linha input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+.fin-lanc-editor .fin-field + .fin-field {
+  margin-top: 10px;
 }
 
 .fin-lanc-item__valor {
@@ -1428,6 +1555,11 @@ textarea {
   .fin-lanc-item {
     grid-template-columns: auto minmax(0, 1fr) auto auto;
     grid-template-areas: "data info valor excluir";
+    gap: 6px 10px;
+  }
+
+  .fin-lanc-item__data {
+    justify-self: start;
   }
 }
 
@@ -1580,6 +1712,222 @@ textarea {
   .fin-carteira__cab span:not(:first-child) {
     text-align: right;
   }
+}
+
+/* ============================================================
+   CONTAS (Open Finance)
+   ============================================================ */
+
+.fin-of-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* O cabeçalho da conexão alinha pelo centro, não pela linha de base: os
+   dois botões de ícone ao lado do título ficam tortos com baseline. */
+.fin-of-cab {
+  align-items: center;
+  flex-wrap: nowrap;
+}
+
+.fin-of-cab__acoes {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.fin-of-status {
+  color: var(--sc, var(--fin-muted));
+  font-weight: 600;
+}
+
+.fin-of-aviso {
+  margin: 0 15px 12px;
+}
+
+.fin-of-nota {
+  font-size: 11.5px;
+  color: var(--fin-muted);
+  margin: 10px 0 0;
+  max-width: 64ch;
+}
+
+/* O caminho manual fica abaixo do botão principal, separado por um fio:
+   é a alternativa, não a primeira coisa que se vê. */
+.fin-of-manual {
+  margin-top: 14px;
+  padding-top: 13px;
+  border-top: 1px solid var(--fin-border);
+}
+
+.fin-of-cartao {
+  border-top: 1px solid var(--fin-border);
+}
+
+/* O primeiro item da lista já traz borda em cima; dentro do bloco do
+   cartão ela dobraria com a do próprio bloco. */
+.fin-of-cartao > .fin-list__item {
+  border-top: none;
+}
+
+.fin-of-cartao__corpo {
+  padding: 0 15px 14px 55px;
+}
+
+@media (max-width: 479px) {
+  .fin-of-cartao__corpo {
+    padding-left: 15px;
+  }
+}
+
+.fin-of-fatos {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 14px;
+  margin: 0;
+}
+
+@media (min-width: 640px) {
+  .fin-of-fatos {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+.fin-of-fatos dt {
+  font-size: 9.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--fin-muted);
+  opacity: 0.75;
+}
+
+.fin-of-fatos dd {
+  margin: 1px 0 0;
+  font-family: var(--fin-font-num);
+  font-variant-numeric: tabular-nums;
+  font-size: 12.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Limite usado: trilho fino e chapado, sem brilho. */
+.fin-of-limite {
+  height: 4px;
+  margin-top: 11px;
+  border-radius: 2px;
+  background: var(--fin-bg-3);
+  overflow: hidden;
+}
+
+.fin-of-limite span {
+  display: block;
+  height: 100%;
+  background: var(--fin-out);
+}
+
+.fin-of-faturas {
+  display: flex;
+  flex-direction: column;
+  margin-top: 8px;
+  border: 1px solid var(--fin-border);
+  border-radius: var(--fin-radius);
+}
+
+.fin-of-faturas > * + * {
+  border-top: 1px solid var(--fin-border);
+}
+
+.fin-of-fatura {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr) auto 14px;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  background: none;
+  color: var(--fin-text);
+  font-family: inherit;
+  font-size: 12.5px;
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--fin-transition);
+}
+
+.fin-of-fatura:hover {
+  background: var(--fin-bg-3);
+}
+
+.fin-of-fatura--estatica {
+  grid-template-columns: 52px minmax(0, 1fr) auto;
+  cursor: default;
+}
+
+.fin-of-fatura--estatica:hover {
+  background: none;
+}
+
+.fin-of-fatura__mes {
+  font-weight: 600;
+}
+
+.fin-of-fatura__meta {
+  font-size: 11px;
+  color: var(--fin-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.fin-of-fatura__val {
+  font-family: var(--fin-font-num);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.fin-of-fatura__seta {
+  color: var(--fin-muted);
+  transition: transform var(--fin-transition);
+}
+
+.fin-of-fatura[aria-expanded="true"] .fin-of-fatura__seta {
+  transform: rotate(180deg);
+}
+
+.fin-of-parcelas {
+  list-style: none;
+  margin: 0;
+  padding: 4px 10px 8px 72px;
+  background: var(--fin-bg-3);
+}
+
+@media (max-width: 479px) {
+  .fin-of-parcelas {
+    padding-left: 10px;
+  }
+}
+
+.fin-of-parcelas li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 10px;
+  align-items: baseline;
+  padding: 3px 0;
+  font-size: 11.5px;
+}
+
+.fin-of-parcelas li > span:first-child {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.fin-of-parcelas small {
+  color: var(--fin-muted);
+  font-size: 10.5px;
 }
 
 /* ============================================================

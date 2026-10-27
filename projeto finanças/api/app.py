@@ -11,7 +11,7 @@ Rodar:
 """
 
 import re
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from functools import wraps
 
@@ -22,6 +22,7 @@ import config
 import cotacoes
 import gamificacao
 import ia
+import openfinance
 import seguranca
 from db import buscar_todos, buscar_um, cursor
 
@@ -279,6 +280,9 @@ def _serializar(t):
         "natureza": t["natureza"],
         "categoria": t["categoria"],
         "recorrencia": t["recorrencia"],
+        "importada": t.get("origem_id") is not None,
+        "ignorada": bool(t.get("ignorada")),
+        "meio": t.get("meio"),
     }
 
 
@@ -292,8 +296,8 @@ def listar_transacoes():
     saldo acumulado bater.
     """
     linhas = buscar_todos(
-        "SELECT id, data, nome, valor, natureza, categoria, recorrencia "
-        "FROM transacoes WHERE usuario_id = %s ORDER BY data, id",
+        "SELECT id, data, nome, valor, natureza, categoria, recorrencia, origem_id, "
+        "ignorada, meio FROM transacoes WHERE usuario_id = %s ORDER BY data, id",
         (g.sessao["usuario_id"],),
     )
     return jsonify([_serializar(t) for t in linhas])
@@ -327,6 +331,42 @@ def criar_transacao():
         )
         novo_id = cur.lastrowid
     return jsonify({"ok": True, "id": novo_id}), 201
+
+
+@app.patch("/api/transacoes/<int:transacao_id>")
+@exige_sessao()
+def editar_transacao(transacao_id):
+    """Troca a categoria e/ou marca o lançamento como "não conta".
+
+    Categoria escolhida aqui vira categoria_manual: regra de categoria
+    criada depois não passa por cima da escolha do usuário.
+    """
+    d = request.get_json(silent=True) or {}
+    campos, valores = [], []
+    if "categoria" in d:
+        categoria = str(d.get("categoria") or "").strip()[:80]
+        if not categoria:
+            return erro("Informe a categoria.")
+        campos += ["categoria = %s", "categoria_manual = 1"]
+        valores.append(categoria)
+    if "ignorada" in d:
+        campos.append("ignorada = %s")
+        valores.append(1 if d.get("ignorada") else 0)
+    if not campos:
+        return erro("Nada para alterar.")
+
+    with cursor(commit=True) as cur:
+        cur.execute(
+            f"UPDATE transacoes SET {', '.join(campos)} WHERE id = %s AND usuario_id = %s",
+            (*valores, transacao_id, g.sessao["usuario_id"]),
+        )
+        # rowcount 0 também quando nada mudou; confere a existência à parte.
+        if cur.rowcount == 0 and not buscar_um(
+            "SELECT id FROM transacoes WHERE id = %s AND usuario_id = %s",
+            (transacao_id, g.sessao["usuario_id"]),
+        ):
+            return erro("Lançamento não encontrado.", 404)
+    return jsonify({"ok": True})
 
 
 @app.delete("/api/transacoes/<int:transacao_id>")
@@ -757,6 +797,298 @@ def apagar_meta(meta_id):
         )
         if cur.rowcount == 0:
             return erro("Meta não encontrada.", 404)
+    return jsonify({"ok": True})
+
+
+# ── Open Finance (Pluggy) ────────────────────────────────────
+def _conexoes(usuario_id):
+    return buscar_todos(
+        "SELECT id, item_id, instituicao, importado_ate FROM conexoes_bancarias "
+        "WHERE usuario_id = %s ORDER BY id",
+        (usuario_id,),
+    )
+
+
+def _conexao_do_usuario(conexao_id, usuario_id):
+    return buscar_um(
+        "SELECT id, item_id FROM conexoes_bancarias WHERE id = %s AND usuario_id = %s",
+        (conexao_id, usuario_id),
+    )
+
+
+@app.get("/api/openfinance")
+@exige_sessao()
+def ler_openfinance():
+    """Saldos, cartões e faturas de cada conexão, lidos da Pluggy agora.
+
+    Uma conexão que falha não derruba as outras: ela volta com `dados` nulo
+    e o próprio `aviso`, e a tela mostra o resto.
+    """
+    conexoes = _conexoes(g.sessao["usuario_id"])
+
+    saida = []
+    for c in conexoes:
+        dados, aviso = openfinance.panorama(c["item_id"])
+        saida.append({
+            "id": c["id"],
+            "itemId": c["item_id"],
+            "instituicao": (dados or {}).get("instituicao") or c["instituicao"] or "Conexão",
+            "importadoAte": c["importado_ate"].isoformat() if c["importado_ate"] else None,
+            "dados": dados,
+            "aviso": aviso,
+        })
+
+    # A primeira importação pega os 12 meses que o Open Finance costuma
+    # guardar. As seguintes recomeçam 35 dias antes da última: compra no
+    # cartão fica pendente até a fatura fechar e, quando compensa, mantém a
+    # data da compra. Com uma semana só, ela caía fora da janela para
+    # sempre. A chave única barra o repetido.
+    hoje = date.today()
+    ultimas = [c["importado_ate"] for c in conexoes if c["importado_ate"]]
+    if conexoes and len(ultimas) == len(conexoes):
+        desde = min(ultimas) - timedelta(days=35)
+    else:
+        desde = hoje - timedelta(days=365)
+
+    return jsonify({
+        "disponivel": openfinance.disponivel(),
+        "aviso": None if openfinance.disponivel() else openfinance.sem_credencial(),
+        "conexoes": saida,
+        "importarDesde": desde.isoformat(),
+    })
+
+
+@app.post("/api/openfinance/connect-token")
+@exige_sessao()
+def token_do_widget():
+    """Token para o widget Pluggy Connect. Com `conexaoId`, o widget abre
+    para reconectar aquela conexão (consentimento expirado, por exemplo)."""
+    conexao_id = (request.get_json(silent=True) or {}).get("conexaoId")
+    item_id = None
+    if conexao_id:
+        conexao = _conexao_do_usuario(conexao_id, g.sessao["usuario_id"])
+        if not conexao:
+            return erro("Conexão não encontrada.", 404)
+        item_id = conexao["item_id"]
+
+    token, aviso = openfinance.token_do_widget(g.sessao["usuario_id"], item_id)
+    if not token:
+        return erro(aviso, 502)
+    return jsonify({"accessToken": token})
+
+
+@app.post("/api/openfinance/conexoes")
+@exige_sessao()
+def criar_conexao():
+    item_id = str((request.get_json(silent=True) or {}).get("itemId") or "").strip().lower()
+
+    # Confere na Pluggy antes de gravar: id digitado errado vira erro aqui,
+    # e não uma conexão quebrada para sempre na tela.
+    item, aviso = openfinance.conferir(item_id)
+    if not item:
+        return erro(aviso or "Conexão não encontrada.")
+
+    with cursor(commit=True) as cur:
+        cur.execute(
+            "INSERT INTO conexoes_bancarias (usuario_id, item_id, instituicao) "
+            "VALUES (%s, %s, %s) AS novo "
+            "ON DUPLICATE KEY UPDATE instituicao = novo.instituicao",
+            (g.sessao["usuario_id"], item_id, item["instituicao"][:120]),
+        )
+    return jsonify({"ok": True, "instituicao": item["instituicao"]}), 201
+
+
+@app.delete("/api/openfinance/conexoes/<int:conexao_id>")
+@exige_sessao()
+def apagar_conexao(conexao_id):
+    """Tira a conexão do app. As transações já importadas ficam: são
+    histórico, e apagar lançamento junto seria surpresa ruim."""
+    conexao = _conexao_do_usuario(conexao_id, g.sessao["usuario_id"])
+    if not conexao:
+        return erro("Conexão não encontrada.", 404)
+
+    with cursor(commit=True) as cur:
+        cur.execute(
+            "DELETE FROM conexoes_bancarias WHERE id = %s AND usuario_id = %s",
+            (conexao_id, g.sessao["usuario_id"]),
+        )
+    openfinance.esquecer(conexao["item_id"])
+    return jsonify({"ok": True})
+
+
+@app.post("/api/openfinance/conexoes/<int:conexao_id>/atualizar")
+@exige_sessao()
+def atualizar_conexao(conexao_id):
+    """Pede à Pluggy para buscar os dados no banco agora. A resposta volta
+    na hora; a sincronização em si roda do lado de lá e a tela acompanha
+    pelo status da conexão."""
+    conexao = _conexao_do_usuario(conexao_id, g.sessao["usuario_id"])
+    if not conexao:
+        return erro("Conexão não encontrada.", 404)
+
+    aviso = openfinance.atualizar(conexao["item_id"])
+    if aviso:
+        return erro(aviso, 502)
+    return jsonify({"ok": True})
+
+
+@app.post("/api/openfinance/importar")
+@exige_sessao()
+def importar_openfinance():
+    """Traz as transações das conexões para Entradas e Saídas.
+
+    Pode rodar quantas vezes quiser sobre o mesmo período: cada transação
+    leva o id de origem da Pluggy, e a chave única uq_transacoes_origem faz
+    o repetido ser ignorado em vez de duplicado.
+    """
+    uid = g.sessao["usuario_id"]
+    try:
+        desde = date.fromisoformat(str((request.get_json(silent=True) or {}).get("desde")))
+    except ValueError:
+        return erro("Data inicial inválida.")
+    hoje = date.today()
+    if desde > hoje:
+        return erro("A data inicial não pode ser no futuro.")
+
+    conexoes = _conexoes(uid)
+    if not conexoes:
+        return erro("Nenhuma conexão cadastrada.")
+
+    lista, ignoradas, descartados, aviso = openfinance.transacoes(
+        [c["item_id"] for c in conexoes], desde
+    )
+    if aviso:
+        return erro(aviso, 502)
+
+    regras = _regras(uid)
+    for t in lista:
+        t["categoria"] = _categoria_pela_regra(t["nome"], regras) or t["categoria"]
+
+    existentes = set()
+    if lista:
+        marcadores = ", ".join(["%s"] * len(lista))
+        existentes = {
+            l["origem_id"] for l in buscar_todos(
+                f"SELECT origem_id FROM transacoes WHERE usuario_id = %s AND origem_id IN ({marcadores})",
+                (uid, *[t["origem_id"] for t in lista]),
+            )
+        }
+
+    removidas = 0
+    with cursor(commit=True) as cur:
+        if lista:
+            # A linha que já existe só ganha o `meio`: categoria e "não conta"
+            # podem ter sido editados pelo usuário e ficam como estão.
+            cur.executemany(
+                "INSERT INTO transacoes (usuario_id, data, nome, valor, natureza, "
+                "categoria, recorrencia, meio, origem_id) "
+                "VALUES (%s, %s, %s, %s, %s, %s, 'unica', %s, %s) AS novo "
+                "ON DUPLICATE KEY UPDATE meio = novo.meio",
+                [(uid, t["data"], t["nome"], t["valor"], t["natureza"], t["categoria"],
+                  t["meio"], t["origem_id"]) for t in lista],
+            )
+        # O que a regra atual descarta sai do banco mesmo que uma importação
+        # de antes da regra tenha deixado entrar. Só toca linha importada.
+        if descartados:
+            marcadores = ", ".join(["%s"] * len(descartados))
+            cur.execute(
+                f"DELETE FROM transacoes WHERE usuario_id = %s AND origem_id IN ({marcadores})",
+                (uid, *descartados),
+            )
+            removidas = cur.rowcount
+        cur.execute(
+            "UPDATE conexoes_bancarias SET importado_ate = %s WHERE usuario_id = %s",
+            (hoje, uid),
+        )
+
+    novas = sum(1 for t in lista if t["origem_id"] not in existentes)
+    return jsonify({
+        "ok": True,
+        "lidas": len(lista),
+        "novas": novas,
+        "jaExistiam": len(lista) - novas,
+        "removidas": removidas,
+        "ignoradas": ignoradas,
+    })
+
+
+# ── Regras de categoria ──────────────────────────────────────
+def _regras(usuario_id):
+    # Padrão mais longo primeiro: "pix enviado para vilma" ganha de "pix".
+    return buscar_todos(
+        "SELECT id, padrao, categoria FROM regras_categoria WHERE usuario_id = %s "
+        "ORDER BY CHAR_LENGTH(padrao) DESC, id",
+        (usuario_id,),
+    )
+
+
+def _categoria_pela_regra(nome, regras):
+    texto = openfinance.normalizar(nome)
+    for r in regras:
+        if r["padrao"] in texto:
+            return r["categoria"]
+    return None
+
+
+@app.get("/api/regras")
+@exige_sessao()
+def listar_regras():
+    return jsonify([
+        {"id": r["id"], "padrao": r["padrao"], "categoria": r["categoria"]}
+        for r in _regras(g.sessao["usuario_id"])
+    ])
+
+
+@app.post("/api/regras")
+@exige_sessao()
+def criar_regra():
+    """"Descrição contém X vira Y". Vale para as próximas importações e já
+    é aplicada às importadas que existem, menos as de categoria escolhida à
+    mão (categoria_manual)."""
+    d = request.get_json(silent=True) or {}
+    padrao = openfinance.normalizar(d.get("padrao"))[:120]
+    categoria = str(d.get("categoria") or "").strip()[:80]
+    if len(padrao) < 3:
+        return erro("O texto da regra precisa de pelo menos 3 letras.")
+    if not categoria:
+        return erro("Informe a categoria.")
+
+    uid = g.sessao["usuario_id"]
+    alvo = [
+        l["id"] for l in buscar_todos(
+            "SELECT id, nome FROM transacoes WHERE usuario_id = %s AND origem_id IS NOT NULL "
+            "AND categoria_manual = 0",
+            (uid,),
+        )
+        if padrao in openfinance.normalizar(l["nome"])
+    ]
+
+    with cursor(commit=True) as cur:
+        cur.execute(
+            "INSERT INTO regras_categoria (usuario_id, padrao, categoria) VALUES (%s, %s, %s) AS novo "
+            "ON DUPLICATE KEY UPDATE categoria = novo.categoria",
+            (uid, padrao, categoria),
+        )
+        if alvo:
+            marcadores = ", ".join(["%s"] * len(alvo))
+            cur.execute(
+                f"UPDATE transacoes SET categoria = %s WHERE usuario_id = %s AND id IN ({marcadores})",
+                (categoria, uid, *alvo),
+            )
+    return jsonify({"ok": True, "padrao": padrao, "aplicadas": len(alvo)}), 201
+
+
+@app.delete("/api/regras/<int:regra_id>")
+@exige_sessao()
+def apagar_regra(regra_id):
+    """Some a regra; os lançamentos que ela já trocou ficam como estão."""
+    with cursor(commit=True) as cur:
+        cur.execute(
+            "DELETE FROM regras_categoria WHERE id = %s AND usuario_id = %s",
+            (regra_id, g.sessao["usuario_id"]),
+        )
+        if cur.rowcount == 0:
+            return erro("Regra não encontrada.", 404)
     return jsonify({"ok": True})
 
 

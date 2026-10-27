@@ -1,6 +1,29 @@
 """Configuração da API. Tudo sobrescrevível por variável de ambiente."""
 
 import os
+from pathlib import Path
+
+
+def _carregar_env(caminho: Path):
+    """Lê o .env da raiz do projeto (CHAVE=valor, # comenta).
+
+    Leitor próprio em vez de python-dotenv: são dez linhas e uma dependência
+    a menos. Variável que já existe no ambiente ganha do arquivo, então quem
+    configurou pelo Windows (setx) não é atropelado.
+    """
+    if not caminho.is_file():
+        return
+    for linha in caminho.read_text(encoding="utf-8-sig").splitlines():
+        linha = linha.strip()
+        if not linha or linha.startswith("#") or "=" not in linha:
+            continue
+        chave, valor = linha.split("=", 1)
+        os.environ.setdefault(chave.strip(), valor.strip().strip("\"'"))
+
+
+# O .env fica em "projeto finanças/", um nível acima de api/, e está no
+# .gitignore: é onde moram os segredos que não vão para o repositório.
+_carregar_env(Path(__file__).resolve().parent.parent / ".env")
 
 # ── Banco (Laragon) ──────────────────────────────────────────
 # O MySQL do Laragon vem com root sem senha e escutando só em
@@ -79,3 +102,27 @@ IA_MAX_SUBTAREFAS = int(os.getenv("FIN_IA_MAX_SUBTAREFAS", "8"))
 # MEDIUM deixa os passos sob medida para a meta; volte para LOW se o custo
 # começar a pesar.
 IA_THINKING = os.getenv("FIN_IA_THINKING", "MEDIUM")
+
+# ── Open Finance (Pluggy, via Meu Pluggy) ────────────────────
+# As credenciais vêm do painel de desenvolvedor da Pluggy e moram só no
+# ambiente, igual ao token da brapi. Sem elas a tela de Contas abre e
+# explica o que falta.
+PLUGGY_BASE = os.getenv("FIN_PLUGGY_BASE", "https://api.pluggy.ai")
+PLUGGY_CLIENT_ID = os.getenv("FIN_PLUGGY_CLIENT_ID", "").strip()
+PLUGGY_CLIENT_SECRET = os.getenv("FIN_PLUGGY_CLIENT_SECRET", "").strip()
+
+PLUGGY_TIMEOUT = int(os.getenv("FIN_PLUGGY_TIMEOUT", "20"))
+
+# Saldo e fatura ficam em cache por um minuto: a Pluggy só muda esses
+# números quando sincroniza com o banco, então reler a cada F5 não traz
+# nada novo e gasta cota.
+PLUGGY_CACHE_SEGUNDOS = int(os.getenv("FIN_PLUGGY_CACHE", "60"))
+
+# Janela de compras lida para projetar as faturas futuras. A parcela mais
+# recente de cada compra parcelada está sempre na fatura atual ou na
+# anterior, então pouco mais de dois meses já cobre.
+PLUGGY_DIAS_PARCELAS = int(os.getenv("FIN_PLUGGY_DIAS_PARCELAS", "70"))
+
+# Teto de páginas por consulta, para uma conta com histórico enorme não
+# virar uma rajada de requests.
+PLUGGY_MAX_PAGINAS = int(os.getenv("FIN_PLUGGY_MAX_PAGINAS", "30"))

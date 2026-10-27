@@ -5,7 +5,12 @@
 //
 // Formato canônico de uma transação:
 //   { id, data: "YYYY-MM-DD", nome, valor: number>0,
-//     natureza: "receita"|"despesa", categoria, recorrencia: "mensal"|"unica" }
+//     natureza: "receita"|"despesa", categoria, recorrencia: "mensal"|"unica",
+//     importada: bool, ignorada: bool, meio: "conta"|"cartao"|null }
+//
+// `ignorada` = o usuário marcou "não conta". A transação continua na lista
+// de Entradas/Saídas (para poder desmarcar), mas TODO cálculo recebe só
+// `contaveis(lista)`.
 
 // ── Normalização ─────────────────────────────────────────────────────────────
 // A API já devolve tudo normalizado (o MySQL tem DATE e ENUM). Isto aqui é a
@@ -27,7 +32,13 @@ export const normalizarTransacao = (t, i = 0) => ({
   natureza: String(t.natureza || "").toLowerCase().startsWith("rec") ? "receita" : "despesa",
   categoria: (t.categoria || "").trim() || "Sem categoria",
   recorrencia: String(t.recorrencia || "").toLowerCase().startsWith("mens") ? "mensal" : "unica",
+  importada: Boolean(t.importada),
+  ignorada: Boolean(t.ignorada),
+  meio: t.meio || null,
 });
+
+/** O que entra nas contas: tudo menos o marcado como "não conta". */
+export const contaveis = (transacoes) => transacoes.filter((t) => !t.ignorada);
 
 // ── Datas ────────────────────────────────────────────────────────────────────
 export const chaveMes = (d) =>
@@ -79,8 +90,21 @@ export function resumoDoMes(transacoes, ym) {
   return { entradas, saidas, resultado: entradas - saidas, lancamentos: doMes.length };
 }
 
-/** Saldo acumulado desde o primeiro lançamento até o fim de cada mês. */
-export function serieSaldoAcumulado(transacoes, meses) {
+/**
+ * Saldo acumulado desde o primeiro lançamento até o fim de cada mês.
+ *
+ * Com `saldoHoje` (o saldo real vindo dos bancos), a curva é deslocada para
+ * terminar nele: os lançamentos dão a forma, o banco dá a altura. Sem isso,
+ * um histórico importado só dos últimos 12 meses começaria do zero.
+ */
+export function serieSaldoAcumulado(transacoes, meses, saldoHoje = null) {
+  const pontos = acumularPorMes(transacoes, meses);
+  if (saldoHoje == null) return pontos;
+  const ajuste = saldoHoje - saldoAtual(transacoes);
+  return pontos.map((p) => ({ ...p, valor: p.valor + ajuste }));
+}
+
+function acumularPorMes(transacoes, meses) {
   const porMes = new Map();
   transacoes.forEach((t) => {
     const m = mesDaTransacao(t);
@@ -211,8 +235,52 @@ export const criarTransacao = (t) => api.post("/api/transacoes", t);
 
 export const apagarTransacao = (id) => api.del(`/api/transacoes/${id}`);
 
+/** `{ categoria }` e/ou `{ ignorada }`. Categoria trocada aqui vence regra. */
+export const editarTransacao = (id, campos) => api.patch(`/api/transacoes/${id}`, campos);
+
+// ── Regras de categoria ──────────────────────────────────────────────────────
+// "Descrição contém X vira Y". Valem para as próximas importações e, ao
+// serem criadas, para as importadas que já existem.
+export const listarRegras = () => api.get("/api/regras");
+export const criarRegra = (padrao, categoria) => api.post("/api/regras", { padrao, categoria });
+export const apagarRegra = (id) => api.del(`/api/regras/${id}`);
+
+/**
+ * Texto sugerido para a regra a partir de uma descrição: tira número,
+ * data e o "PARC 03/10", que mudam de um mês para o outro e fariam a regra
+ * nunca casar de novo. O usuário pode editar antes de salvar.
+ */
+export function padraoSugerido(nome) {
+  return String(nome || "")
+    .replace(/\bparc(ela)?\b/gi, " ")
+    .replace(/[\d/.,:*|-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 60);
+}
+
 /** Tetos por categoria, na tabela `orcamentos`, chaveada por usuário. */
 export const carregarOrcamentos = () => api.get("/api/orcamentos");
+
+/**
+ * Teto sugerido por categoria: média dos últimos `meses` meses FECHADOS
+ * (o mês corrente pela metade puxaria a média para baixo), arredondada
+ * para cima em dezenas. Categoria com média abaixo de R$ 20 fica de fora:
+ * acompanhar trocado vira só ruído de alerta.
+ */
+export function sugerirOrcamentos(transacoes, hoje = new Date(), meses = 3) {
+  const janela = ultimosMeses(meses + 1, hoje).slice(0, meses);
+  const soma = new Map();
+  transacoes
+    .filter((t) => t.natureza === "despesa" && janela.includes(mesDaTransacao(t)))
+    .forEach((t) => soma.set(t.categoria, (soma.get(t.categoria) || 0) + t.valor));
+
+  return Object.fromEntries(
+    [...soma.entries()]
+      .map(([categoria, total]) => [categoria, Math.ceil(total / meses / 10) * 10])
+      .filter(([, media]) => media >= 20),
+  );
+}
 
 /** Substitui o conjunto inteiro: categoria ausente perde o teto. */
 export const salvarOrcamentos = (orcamentos) => {

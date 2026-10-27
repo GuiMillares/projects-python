@@ -3,7 +3,9 @@
 // Um único lugar que sabe falar HTTP. Nenhuma tela monta URL ou header
 // na mão, o que mantém o token de sessão fora dos componentes.
 
-const BASE = import.meta.env.VITE_API_BASE || "http://127.0.0.1:8756";
+// `?.` porque fora do Vite (os testes rodam os serviços direto no Node) o
+// import.meta.env não existe.
+const BASE = import.meta.env?.VITE_API_BASE || "http://127.0.0.1:8756";
 
 // O token fica em sessionStorage, não em localStorage: fechar a janela
 // derruba a sessão e o código do autenticador é pedido de novo. O

@@ -127,3 +127,60 @@ CREATE TABLE IF NOT EXISTS subtarefas (
     REFERENCES metas (id) ON DELETE CASCADE,
   CONSTRAINT ck_subtarefas_xp CHECK (xp > 0)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 2026-10: Open Finance (Pluggy)
+-- Transação importada guarda o id de origem; a UNIQUE impede que
+-- reimportar o mesmo período duplique lançamento.
+SET @tem_origem := (
+  SELECT COUNT(*) FROM information_schema.COLUMNS
+   WHERE TABLE_SCHEMA = 'local_finance' AND TABLE_NAME = 'transacoes'
+     AND COLUMN_NAME = 'origem_id'
+);
+SET @sql := IF(@tem_origem = 0,
+  'ALTER TABLE transacoes ADD COLUMN origem_id VARCHAR(64) NULL AFTER observacao, ADD UNIQUE KEY uq_transacoes_origem (usuario_id, origem_id)',
+  'SELECT "transacoes.origem_id já existe" AS aviso');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+CREATE TABLE IF NOT EXISTS conexoes_bancarias (
+  id                 INT UNSIGNED  NOT NULL AUTO_INCREMENT,
+  usuario_id         INT UNSIGNED  NOT NULL,
+  item_id            CHAR(36)      NOT NULL,
+  instituicao        VARCHAR(120)  NOT NULL DEFAULT '',
+  importado_ate      DATE          NULL,
+  criado_em          DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_conexoes_item (usuario_id, item_id),
+  CONSTRAINT fk_conexoes_usuario FOREIGN KEY (usuario_id)
+    REFERENCES usuarios (id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 2026-10: lançamento que não conta, meio de pagamento e categoria editada.
+--   ignorada          fica no histórico mas sai de totais e gráficos
+--                     (dinheiro só de passagem, por exemplo)
+--   meio              conta ou cartão, só nas importadas: a previsão do mês
+--                     não pode descontar da conta o que vai para a fatura
+--   categoria_manual  o usuário escolheu a categoria; regra nenhuma troca
+SET @falta := (
+  SELECT COUNT(*) = 0 FROM information_schema.COLUMNS
+   WHERE TABLE_SCHEMA = 'local_finance' AND TABLE_NAME = 'transacoes'
+     AND COLUMN_NAME = 'ignorada'
+);
+SET @sql := IF(@falta,
+  'ALTER TABLE transacoes ADD COLUMN ignorada TINYINT(1) NOT NULL DEFAULT 0 AFTER recorrencia, ADD COLUMN meio ENUM(''conta'',''cartao'') NULL AFTER ignorada, ADD COLUMN categoria_manual TINYINT(1) NOT NULL DEFAULT 0 AFTER categoria',
+  'SELECT "transacoes.ignorada já existe" AS aviso');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+-- Regra "descrição contém X vira categoria Y", aplicada a cada importação.
+-- `padrao` fica normalizado (minúsculo, sem acento) para casar com o
+-- mesmo texto que o Python gera.
+CREATE TABLE IF NOT EXISTS regras_categoria (
+  id          INT UNSIGNED  NOT NULL AUTO_INCREMENT,
+  usuario_id  INT UNSIGNED  NOT NULL,
+  padrao      VARCHAR(120)  NOT NULL,
+  categoria   VARCHAR(80)   NOT NULL,
+  criado_em   DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_regras_padrao (usuario_id, padrao),
+  CONSTRAINT fk_regras_usuario FOREIGN KEY (usuario_id)
+    REFERENCES usuarios (id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

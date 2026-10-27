@@ -10,9 +10,11 @@
   },
   "dependencies": {
     "lucide-react": "^0.446.0",
+    "pluggy-js": "0.19.3",
     "qrcode": "^1.5.4",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "react-pluggy-connect": "2.12.0",
     "react-router-dom": "^6.26.2"
   },
   "devDependencies": {

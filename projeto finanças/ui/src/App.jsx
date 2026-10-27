@@ -3,6 +3,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import AppLayout from "./components/AppLayout";
 import { PerfilProvider } from "./context/PerfilProvider";
 import Configuracoes from "./pages/Configuracoes";
+import Contas from "./pages/Contas";
 import Dashboard from "./pages/Dashboard";
 import Investimentos from "./pages/Investimentos";
 import Lancamentos from "./pages/Lancamentos";
@@ -43,6 +44,7 @@ export default function App() {
               <AppLayout>
                 <Routes>
                   <Route index element={<Dashboard />} />
+                  <Route path="contas" element={<Contas />} />
                   {/* Entradas e Saídas são a mesma tela com `natureza`
                       trocada; ver pages/Lancamentos.jsx. A key força a
                       remontagem ao navegar de uma para a outra, senão o

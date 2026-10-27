@@ -81,10 +81,22 @@ CREATE TABLE IF NOT EXISTS transacoes (
   valor       DECIMAL(12,2)   NOT NULL,
   natureza    ENUM('receita','despesa')  NOT NULL,
   categoria   VARCHAR(80)     NOT NULL DEFAULT 'Sem categoria',
+  -- 1 = o usuário escolheu a categoria; regra de categoria não troca.
+  categoria_manual TINYINT(1) NOT NULL DEFAULT 0,
   recorrencia ENUM('unica','mensal')     NOT NULL DEFAULT 'unica',
+  -- Fica no histórico mas sai de totais e gráficos (dinheiro de passagem).
+  ignorada    TINYINT(1)      NOT NULL DEFAULT 0,
+  -- Só nas importadas: a previsão do mês não desconta da conta o que vai
+  -- para a fatura do cartão.
+  meio        ENUM('conta','cartao') NULL,
   observacao  VARCHAR(255)    NULL,
+  -- Id da transação na Pluggy quando veio do Open Finance; NULL quando foi
+  -- lançada à mão. A chave única é o que deixa reimportar o mesmo período
+  -- sem duplicar (o MySQL aceita vários NULL numa UNIQUE).
+  origem_id   VARCHAR(64)     NULL,
   criado_em   DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
+  UNIQUE KEY uq_transacoes_origem (usuario_id, origem_id),
   -- O dashboard sempre filtra por usuário + faixa de data: este é o
   -- índice que serve praticamente todas as consultas dele.
   KEY ix_transacoes_usuario_data (usuario_id, data),
@@ -175,4 +187,39 @@ CREATE TABLE IF NOT EXISTS subtarefas (
   CONSTRAINT fk_subtarefas_meta FOREIGN KEY (meta_id)
     REFERENCES metas (id) ON DELETE CASCADE,
   CONSTRAINT ck_subtarefas_xp CHECK (xp > 0)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ── Conexões do Open Finance ────────────────────────────────
+-- Só o id da conexão na Pluggy (o "item"). Saldo e fatura NÃO são
+-- gravados: são lidos da Pluggy a cada carga da tela, pelo mesmo motivo
+-- do valor atual dos investimentos (api/openfinance.py).
+CREATE TABLE IF NOT EXISTS conexoes_bancarias (
+  id                 INT UNSIGNED  NOT NULL AUTO_INCREMENT,
+  usuario_id         INT UNSIGNED  NOT NULL,
+  item_id            CHAR(36)      NOT NULL,
+  instituicao        VARCHAR(120)  NOT NULL DEFAULT '',
+  -- Até onde a última importação de transações foi. A próxima sugere
+  -- começar um pouco antes daqui, e não do começo de tudo.
+  importado_ate      DATE          NULL,
+  criado_em          DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_conexoes_item (usuario_id, item_id),
+  CONSTRAINT fk_conexoes_usuario FOREIGN KEY (usuario_id)
+    REFERENCES usuarios (id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ── Regras de categoria ─────────────────────────────────────
+-- "Descrição contém X vira categoria Y", aplicada a cada importação e,
+-- ao ser criada, às importadas que já existem. `padrao` fica normalizado
+-- (minúsculo, sem acento) para casar com o texto que o Python gera.
+CREATE TABLE IF NOT EXISTS regras_categoria (
+  id          INT UNSIGNED  NOT NULL AUTO_INCREMENT,
+  usuario_id  INT UNSIGNED  NOT NULL,
+  padrao      VARCHAR(120)  NOT NULL,
+  categoria   VARCHAR(80)   NOT NULL,
+  criado_em   DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_regras_padrao (usuario_id, padrao),
+  CONSTRAINT fk_regras_usuario FOREIGN KEY (usuario_id)
+    REFERENCES usuarios (id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

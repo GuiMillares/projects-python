@@ -12,23 +12,29 @@ import {
   KeyRound,
   Loader2,
   ShieldCheck,
+  Tags,
   Target,
   Trash2,
   TriangleAlert,
   User,
+  Wand2,
 } from "lucide-react";
 import QRCode from "qrcode";
 import { useEffect, useRef, useState } from "react";
 import { usePerfil } from "../context/PerfilProvider";
 import { desativar2FA, iniciarSetup2FA, verificar2FA } from "../services/authService";
 import {
+  apagarRegra,
   brl,
   carregarOrcamentos,
   categorias as extrairCategorias,
   chaveMes,
+  contaveis,
   gastosPorCategoria,
+  listarRegras,
   listarTransacoes,
   salvarOrcamentos,
+  sugerirOrcamentos,
 } from "../services/financasService";
 import { criarMapaDeCores } from "../services/cores";
 import { ImagemInvalida, prepararFotoPerfil } from "../services/imagem";
@@ -74,6 +80,11 @@ export default function Configuracoes() {
   const [gastoDoMes, setGastoDoMes] = useState({});
   const [listaCategorias, setListaCategorias] = useState([]);
   const [salvandoOrc, setSalvandoOrc] = useState(false);
+  const [sugestao, setSugestao] = useState({});
+
+  // Regras de categoria (criadas no editor de Entradas/Saídas)
+  const [regras, setRegras] = useState([]);
+  const [apagandoRegra, setApagandoRegra] = useState(null);
 
   const avisar = (msg, tipo = "success") => {
     setToast({ msg, tipo });
@@ -90,12 +101,16 @@ export default function Configuracoes() {
   useEffect(() => {
     (async () => {
       try {
-        const [transacoes, orc] = await Promise.all([
+        const [todas, orc, rs] = await Promise.all([
           listarTransacoes(),
           carregarOrcamentos(),
+          listarRegras(),
         ]);
+        const transacoes = contaveis(todas);
         setListaCategorias(extrairCategorias(transacoes));
         setOrcamentos(orc || {});
+        setSugestao(sugerirOrcamentos(transacoes));
+        setRegras(rs || []);
         setGastoDoMes(
           Object.fromEntries(
             gastosPorCategoria(transacoes, chaveMes(new Date())).map((c) => [c.label, c.valor]),
@@ -239,6 +254,31 @@ export default function Configuracoes() {
   };
 
   // ── Orçamentos ────────────────────────────────────────────────────────────
+  // Preenche só o que está vazio: teto que o usuário já escolheu não é
+  // trocado pela média. Nada é salvo até ele apertar Salvar.
+  const preencherSugestao = () => {
+    const vazias = Object.entries(sugestao).filter(([cat]) => !(Number(orcamentos[cat]) > 0));
+    setOrcamentos((o) => ({ ...o, ...Object.fromEntries(vazias) }));
+    avisar(
+      vazias.length
+        ? `${vazias.length} ${vazias.length === 1 ? "teto sugerido" : "tetos sugeridos"}. Revise e salve.`
+        : "Todas as categorias já têm teto.",
+    );
+  };
+
+  const removerRegra = async (r) => {
+    setApagandoRegra(r.id);
+    try {
+      await apagarRegra(r.id);
+      setRegras((lista) => lista.filter((x) => x.id !== r.id));
+      avisar("Regra removida.");
+    } catch (err) {
+      avisar(err.message, "error");
+    } finally {
+      setApagandoRegra(null);
+    }
+  };
+
   const handleOrcamentos = async (e) => {
     e.preventDefault();
     setSalvandoOrc(true);
@@ -584,7 +624,7 @@ export default function Configuracoes() {
                       min="0"
                       step="10"
                       inputMode="decimal"
-                      placeholder="sem teto"
+                      placeholder={sugestao[cat] ? `média ${sugestao[cat]}` : "sem teto"}
                       aria-label={`Teto mensal de ${cat}`}
                       value={orcamentos[cat] ?? ""}
                       onChange={(e) =>
@@ -599,8 +639,56 @@ export default function Configuracoes() {
                 <button className="fin-btn fin-btn--primary fin-btn--sm" disabled={salvandoOrc}>
                   <Check size={13} /> Salvar orçamentos
                 </button>
+                {Object.keys(sugestao).length > 0 && (
+                  <button
+                    type="button"
+                    className="fin-btn fin-btn--ghost fin-btn--sm"
+                    onClick={preencherSugestao}
+                    title="Média dos últimos 3 meses fechados, arredondada para cima"
+                  >
+                    <Wand2 size={13} /> Sugerir pela média
+                  </button>
+                )}
               </div>
             </form>
+          )}
+        </section>
+
+        {/* ── Regras de categoria ── */}
+        <section className="fin-card fin-cfg-largo">
+          <div className="fin-cfg-card__title">
+            <Tags size={15} /> Regras de categoria
+          </div>
+          <p className="fin-field__hint" style={{ marginBottom: 12 }}>
+            Criadas ao trocar a categoria de um lançamento importado em Entradas ou Saídas. Cada
+            importação aplica estas regras. Remover uma regra não desfaz o que ela já trocou.
+          </p>
+
+          {regras.length === 0 ? (
+            <div className="fin-empty">
+              <Tags size={26} />
+              <span>Nenhuma regra ainda. Toque num lançamento importado para criar a primeira.</span>
+            </div>
+          ) : (
+            regras.map((r) => (
+              <div key={r.id} className="fin-budget-row">
+                <span className="fin-budget-row__name">
+                  &ldquo;{r.padrao}&rdquo;
+                  <span className="fin-field__hint" style={{ marginLeft: 8 }}>
+                    vira {r.categoria}
+                  </span>
+                </span>
+                <button
+                  className="fin-lanc-item__excluir"
+                  onClick={() => removerRegra(r)}
+                  disabled={apagandoRegra === r.id}
+                  aria-label={`Remover regra ${r.padrao}`}
+                  title="Remover regra"
+                >
+                  <Trash2 size={14} />
+                </button>
+              </div>
+            ))
           )}
         </section>
       </div>

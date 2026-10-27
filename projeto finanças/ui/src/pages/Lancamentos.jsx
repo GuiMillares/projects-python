@@ -5,6 +5,11 @@
 // ajuste e a outra fique para trás.
 //
 // A diferença fica em `PERFIS`: cor, textos e ícones.
+//
+// Tocar na descrição abre o editor do lançamento: trocar a categoria (e,
+// opcionalmente, criar a regra que faz o mesmo nas próximas importações) e
+// marcar "não conta". O marcado continua na lista, riscado, mas sai dos
+// totais daqui e de todo o resto do app.
 
 import {
   ArrowDownLeft,
@@ -25,10 +30,14 @@ import {
   apagarTransacao,
   brl,
   chaveMes,
+  contaveis,
+  criarRegra,
   criarTransacao,
   dataCurta,
+  editarTransacao,
   listarTransacoes,
   mesDaTransacao,
+  padraoSugerido,
   rotuloMes,
   ultimosMeses,
 } from "../services/financasService";
@@ -81,6 +90,8 @@ export default function Lancamentos({ natureza }) {
   const [salvando, setSalvando] = useState(false);
   const [apagando, setApagando] = useState(null);
   const [paraExcluir, setParaExcluir] = useState(null);
+  // Lançamento com o editor aberto (só um por vez).
+  const [editando, setEditando] = useState(null);
 
   const avisar = (msg, tipo = "success") => {
     setToast({ msg, tipo });
@@ -113,24 +124,26 @@ export default function Lancamentos({ natureza }) {
     setFormAberto(false);
     setForm(formularioVazio());
     setMes(chaveMes(new Date()));
+    setEditando(null);
   }, [natureza]);
 
   const dados = useMemo(() => {
     const minhas = transacoes.filter((t) => t.natureza === natureza);
+    const contam = contaveis(minhas);
     const meses = ultimosMeses(12);
 
     const doMes = minhas
       .filter((t) => mesDaTransacao(t) === mes)
       .sort((a, b) => b.data.localeCompare(a.data));
 
-    const totalMes = doMes.reduce((s, t) => s + t.valor, 0);
+    const totalMes = contaveis(doMes).reduce((s, t) => s + t.valor, 0);
 
-    const totalUltimos12 = minhas
+    const totalUltimos12 = contam
       .filter((t) => meses.includes(mesDaTransacao(t)))
       .reduce((s, t) => s + t.valor, 0);
 
     const ano = mes.slice(0, 4);
-    const totalAno = minhas
+    const totalAno = contam
       .filter((t) => mesDaTransacao(t).startsWith(ano))
       .reduce((s, t) => s + t.valor, 0);
 
@@ -143,6 +156,7 @@ export default function Lancamentos({ natureza }) {
 
     return {
       doMes,
+      naoContam: doMes.filter((t) => t.ignorada).length,
       totalMes,
       mediaMensal: totalUltimos12 / 12,
       totalAno,
@@ -178,6 +192,35 @@ export default function Lancamentos({ natureza }) {
       avisar(err.message, "error");
     } finally {
       setSalvando(false);
+    }
+  };
+
+  /**
+   * Salva o editor. Com `regra`, cria antes a regra de categoria: ela troca
+   * as importadas parecidas (inclusive as de meses passados) e vale para as
+   * próximas importações. A troca deste lançamento vai sempre à parte,
+   * porque um lançamento manual não é alcançado pela regra.
+   */
+  const salvarEdicao = async (t, { categoria, ignorada, regra, padrao }) => {
+    try {
+      let aplicadas = 0;
+      if (regra && categoria !== t.categoria) {
+        aplicadas = (await criarRegra(padrao, categoria)).aplicadas;
+      }
+      const campos = {};
+      if (categoria !== t.categoria) campos.categoria = categoria;
+      if (ignorada !== t.ignorada) campos.ignorada = ignorada;
+      if (Object.keys(campos).length) await editarTransacao(t.id, campos);
+
+      setEditando(null);
+      await carregar();
+      avisar(
+        aplicadas > 1
+          ? `Regra criada: ${aplicadas} lançamentos agora são ${categoria}.`
+          : "Lançamento atualizado.",
+      );
+    } catch (err) {
+      avisar(err.message, "error");
     }
   };
 
@@ -247,7 +290,9 @@ export default function Lancamentos({ natureza }) {
           icone={Icone}
           label={`Total de ${rotuloMes(mes)}`}
           valor={brl(dados.totalMes)}
-          sub={`${dados.doMes.length} ${dados.doMes.length === 1 ? "lançamento" : "lançamentos"}`}
+          sub={`${dados.doMes.length} ${dados.doMes.length === 1 ? "lançamento" : "lançamentos"}${
+            dados.naoContam ? `, ${dados.naoContam} fora da conta` : ""
+          }`}
         />
         <Kpi
           cor="var(--fin-cat-6)"
@@ -406,38 +451,57 @@ export default function Lancamentos({ natureza }) {
         ) : (
           <div className="fin-lanc-lista">
             {dados.doMes.map((t) => (
-              <div key={t.id} className="fin-lanc-item">
-                <div className="fin-lanc-item__data">{dataCurta(t.data)}</div>
+              <div key={t.id}>
+                <div className={`fin-lanc-item${t.ignorada ? " fin-lanc-item--ignorada" : ""}`}>
+                  <div className="fin-lanc-item__data">{dataCurta(t.data)}</div>
 
-                <div className="fin-lanc-item__info">
-                  <div className="fin-lanc-item__nome">{t.nome}</div>
-                  <div className="fin-lanc-item__meta">
-                    <span
-                      className="fin-lanc-item__ponto"
-                      style={{ background: dados.corDaCategoria(t.categoria) }}
-                    />
-                    {t.categoria}
-                    {t.recorrencia === "mensal" && (
-                      <span className="fin-tag">
-                        <Repeat size={10} /> mensal
-                      </span>
-                    )}
+                  <button
+                    type="button"
+                    className="fin-lanc-item__info fin-lanc-item__abrir"
+                    onClick={() => setEditando(editando === t.id ? null : t.id)}
+                    aria-expanded={editando === t.id}
+                    title="Editar categoria ou tirar da conta"
+                  >
+                    <span className="fin-lanc-item__nome">{t.nome}</span>
+                    <span className="fin-lanc-item__meta">
+                      <span
+                        className="fin-lanc-item__ponto"
+                        style={{ background: dados.corDaCategoria(t.categoria) }}
+                      />
+                      {t.categoria}
+                      {t.meio === "cartao" && <span className="fin-tag">cartão</span>}
+                      {t.ignorada && <span className="fin-tag fin-tag--alerta">não conta</span>}
+                      {t.recorrencia === "mensal" && (
+                        <span className="fin-tag">
+                          <Repeat size={10} /> mensal
+                        </span>
+                      )}
+                    </span>
+                  </button>
+
+                  <div className="fin-lanc-item__valor" style={{ color: perfil.cor }}>
+                    {natureza === "receita" ? "+" : "−"} {brl(t.valor)}
                   </div>
+
+                  <button
+                    className="fin-lanc-item__excluir"
+                    onClick={() => setParaExcluir(t)}
+                    disabled={apagando === t.id}
+                    aria-label={`Excluir ${t.nome}`}
+                    title="Excluir"
+                  >
+                    <Trash2 size={14} />
+                  </button>
                 </div>
 
-                <div className="fin-lanc-item__valor" style={{ color: perfil.cor }}>
-                  {natureza === "receita" ? "+" : "−"} {brl(t.valor)}
-                </div>
-
-                <button
-                  className="fin-lanc-item__excluir"
-                  onClick={() => setParaExcluir(t)}
-                  disabled={apagando === t.id}
-                  aria-label={`Excluir ${t.nome}`}
-                  title="Excluir"
-                >
-                  <Trash2 size={14} />
-                </button>
+                {editando === t.id && (
+                  <EditorLancamento
+                    t={t}
+                    categorias={dados.categorias}
+                    onSalvar={(campos) => salvarEdicao(t, campos)}
+                    onCancelar={() => setEditando(null)}
+                  />
+                )}
               </div>
             ))}
           </div>
@@ -462,6 +526,89 @@ export default function Lancamentos({ natureza }) {
         </div>
       )}
     </>
+  );
+}
+
+function EditorLancamento({ t, categorias, onSalvar, onCancelar }) {
+  const [categoria, setCategoria] = useState(t.categoria);
+  const [ignorada, setIgnorada] = useState(t.ignorada);
+  // Regra só faz sentido para o que veio do banco: lançamento manual não
+  // se repete sozinho na próxima importação.
+  const [regra, setRegra] = useState(t.importada);
+  const [padrao, setPadrao] = useState(() => padraoSugerido(t.nome));
+  const [salvando, setSalvando] = useState(false);
+
+  const mudouCategoria = categoria.trim() && categoria.trim() !== t.categoria;
+  const idCampo = `ed-${t.id}`;
+
+  const salvar = async (e) => {
+    e.preventDefault();
+    setSalvando(true);
+    await onSalvar({
+      categoria: categoria.trim() || t.categoria,
+      ignorada,
+      regra: regra && mudouCategoria && padrao.trim().length >= 3,
+      padrao: padrao.trim(),
+    });
+    setSalvando(false);
+  };
+
+  return (
+    <form className="fin-lanc-editor fin-form" onSubmit={salvar}>
+      <div className="fin-field">
+        <label htmlFor={`${idCampo}-cat`}>Categoria</label>
+        <input
+          id={`${idCampo}-cat`}
+          list={`${idCampo}-lista`}
+          value={categoria}
+          onChange={(e) => setCategoria(e.target.value)}
+          maxLength={80}
+          autoFocus
+        />
+        <datalist id={`${idCampo}-lista`}>
+          {categorias.map((c) => (
+            <option key={c} value={c} />
+          ))}
+        </datalist>
+      </div>
+
+      {t.importada && mudouCategoria && (
+        <>
+          <label className="fin-lanc-editor__linha">
+            <input type="checkbox" checked={regra} onChange={(e) => setRegra(e.target.checked)} />
+            Fazer o mesmo com todos que tenham na descrição:
+          </label>
+          {regra && (
+            <div className="fin-field">
+              <input
+                aria-label="Texto da regra"
+                value={padrao}
+                onChange={(e) => setPadrao(e.target.value)}
+                maxLength={120}
+              />
+              <span className="fin-field__hint">
+                Vale para o que já foi importado e para as próximas importações. Sem maiúsculas
+                nem acento.
+              </span>
+            </div>
+          )}
+        </>
+      )}
+
+      <label className="fin-lanc-editor__linha">
+        <input type="checkbox" checked={ignorada} onChange={(e) => setIgnorada(e.target.checked)} />
+        Não contar nos totais (dinheiro só de passagem, por exemplo)
+      </label>
+
+      <div className="fin-form__actions" style={{ marginTop: 12 }}>
+        <button className="fin-btn fin-btn--primary fin-btn--sm" disabled={salvando}>
+          {salvando ? <Loader2 size={13} className="fin-spin" /> : <Check size={13} />} Salvar
+        </button>
+        <button type="button" className="fin-btn fin-btn--ghost fin-btn--sm" onClick={onCancelar}>
+          Cancelar
+        </button>
+      </div>
+    </form>
   );
 }
 

@@ -2,13 +2,14 @@
 //
 // Desktop (≥900px): sidebar fixa à esquerda.
 // Mobile: a sidebar some e as mesmas rotas viram bottom navigation: o
-// polegar alcança, e o topo fica livre para o conteúdo. Configurações não
-// entra na barra de baixo (cinco itens já é o limite legível); vive no menu
-// do avatar, em ambos os tamanhos.
+// polegar alcança, e o topo fica livre para o conteúdo. Configurações e
+// Contas não entram na barra de baixo (cinco itens já é o limite legível);
+// no mobile vivem no menu do avatar.
 
 import {
   ArrowDownLeft,
   ArrowUpRight,
+  Landmark,
   LayoutGrid,
   LogOut,
   Moon,
@@ -27,6 +28,7 @@ import { iniciais } from "../services/perfilService";
 
 const NAV = [
   { to: "/app", fim: true, icon: LayoutGrid, label: "Visão geral", curto: "Geral" },
+  { to: "/app/contas", icon: Landmark, label: "Contas", curto: "Contas", foraDaBarra: true },
   { to: "/app/entradas", icon: ArrowUpRight, label: "Entradas", curto: "Entradas" },
   { to: "/app/saidas", icon: ArrowDownLeft, label: "Saídas", curto: "Saídas" },
   { to: "/app/investimentos", icon: TrendingUp, label: "Investimentos", curto: "Investir" },
@@ -35,6 +37,7 @@ const NAV = [
 
 const TITULOS = {
   "/app": "Visão geral",
+  "/app/contas": "Contas",
   "/app/entradas": "Entradas",
   "/app/saidas": "Saídas",
   "/app/investimentos": "Investimentos",
@@ -156,6 +159,17 @@ export default function AppLayout({ children }) {
                   </div>
 
                   <button
+                    className="fin-menu__item fin-menu__item--mobile"
+                    role="menuitem"
+                    onClick={() => {
+                      navigate("/app/contas");
+                      setMenuAberto(false);
+                    }}
+                  >
+                    <Landmark size={14} /> Contas
+                  </button>
+
+                  <button
                     className="fin-menu__item"
                     role="menuitem"
                     onClick={() => {
@@ -188,7 +202,7 @@ export default function AppLayout({ children }) {
       </div>
 
       <nav className="fin-bottomnav" aria-label="Navegação principal">
-        {NAV.map(({ to, fim, icon: Icone, curto }) => (
+        {NAV.filter((n) => !n.foraDaBarra).map(({ to, fim, icon: Icone, curto }) => (
           <NavLink
             key={to}
             to={to}
