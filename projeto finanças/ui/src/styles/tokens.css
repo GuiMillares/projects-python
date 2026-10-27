@@ -61,6 +61,26 @@
   --fin-cat-5: #A0617C;   /* ameixa     */
   --fin-cat-6: #77808C;   /* ardósia    */
 
+  /* ── Pedras da escada de níveis (services/niveis.js) ──
+     Da menos à mais preciosa. Cada uma na cor da pedra de verdade, mas
+     só pedras quentes, verdes e rosadas: safira, água-marinha e ametista
+     ficam de fora pela mesma regra de nada de azul, ciano ou roxo. */
+  --fin-gema-1: #9A8E7C;  /* quartzo fumê      */
+  --fin-gema-2: #B5794D;  /* ágata             */
+  --fin-gema-3: #4E8C5A;  /* malaquita         */
+  --fin-gema-4: #D3922F;  /* âmbar             */
+  --fin-gema-5: #DDBB3F;  /* citrino           */
+  --fin-gema-6: #A9C23D;  /* peridoto          */
+  --fin-gema-7: #A33A3F;  /* granada           */
+  --fin-gema-8: #D17B8C;  /* turmalina rosa    */
+  --fin-gema-9: #E39A5C;  /* topázio imperial  */
+  --fin-gema-10: #E5652E; /* opala de fogo     */
+  --fin-gema-11: #2FA567; /* esmeralda         */
+  --fin-gema-12: #D8345A; /* rubi              */
+  --fin-gema-13: #EFE8D8; /* diamante          */
+  --fin-gema-14: #EC9EB2; /* diamante rosa     */
+  --fin-gema-15: #C8161F; /* diamante vermelho */
+
   /* ── Forma ──
      Raio pequeno e sombra quase inexistente: a hierarquia vem da
      borda e do peso do texto, não de card flutuante. */
@@ -117,6 +137,24 @@
   --fin-cat-4: #376B3E;
   --fin-cat-5: #7C3E55;
   --fin-cat-6: #4B5560;
+
+  /* Pedras mais escuras para ler sobre o papel. O diamante, que é quase
+     branco no escuro, vira grafite quente: branco sumiria aqui. */
+  --fin-gema-1: #6B6050;
+  --fin-gema-2: #87522B;
+  --fin-gema-3: #2F6339;
+  --fin-gema-4: #95610E;
+  --fin-gema-5: #8C7410;
+  --fin-gema-6: #5A6F12;
+  --fin-gema-7: #7E2229;
+  --fin-gema-8: #9C4A5C;
+  --fin-gema-9: #A3602A;
+  --fin-gema-10: #A83F13;
+  --fin-gema-11: #1B7347;
+  --fin-gema-12: #A11B3C;
+  --fin-gema-13: #5E574A;
+  --fin-gema-14: #B25C75;
+  --fin-gema-15: #8E0E15;
 
   --fin-shadow: 0 10px 30px rgba(35, 31, 24, 0.12);
 

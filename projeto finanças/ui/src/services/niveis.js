@@ -2,8 +2,11 @@
 //
 // O desenho segue o que os sistemas de rank maduros fazem em três camadas
 // (pesquisado em 18/08/2026):
-//   1. PATAMARES com nome de material, do humilde ao lendário: é o modelo
-//      Duolingo (Bronze -> ... -> Obsidiana -> Diamante) e Overwatch.
+//   1. PATAMARES de pedras preciosas, da menos à mais preciosa (desde
+//      27/10/2026; antes eram materiais, de Semente a Lenda). A cor do
+//      selo é a da pedra, e o desenho melhora junto com ela: pedra bruta
+//      nos 5 primeiros patamares, lapidação simples nos 5 do meio e
+//      lapidação brilhante nos 5 últimos.
 //   2. DIVISÕES em algarismo romano dentro do patamar (IV -> I), como
 //      League of Legends: subir de Ouro III para Ouro II é progresso
 //      visível mesmo longe da troca de patamar. A divisão também muda a
@@ -26,24 +29,34 @@ export const NIVEL_MAXIMO = 300;
 export const NIVEIS_POR_PATAMAR = 20; // 4 divisões de 5 níveis
 const NIVEIS_POR_DIVISAO = 5;
 
-// Ordem: brotar -> material bruto -> metais -> preciosos -> lendário.
-export const PATAMARES = [
-  { nome: "Semente", icone: "Sprout", cor: "var(--fin-cat-3)" },
-  { nome: "Broto", icone: "Leaf", cor: "var(--fin-cat-4)" },
-  { nome: "Madeira", icone: "TreePine", cor: "var(--fin-cat-1)" },
-  { nome: "Pedra", icone: "Mountain", cor: "var(--fin-cat-6)" },
-  { nome: "Bronze", icone: "Medal", cor: "var(--fin-cat-2)" },
-  { nome: "Cobre", icone: "Coins", cor: "var(--fin-out)" },
-  { nome: "Ferro", icone: "Hammer", cor: "var(--fin-muted)" },
-  { nome: "Aço", icone: "Shield", cor: "var(--fin-cat-6)" },
-  { nome: "Prata", icone: "Award", cor: "var(--fin-muted)" },
-  { nome: "Ouro", icone: "Trophy", cor: "var(--fin-warn)" },
-  { nome: "Jade", icone: "Gem", cor: "var(--fin-cat-4)" },
-  { nome: "Rubi", icone: "Diamond", cor: "var(--fin-danger)" },
-  { nome: "Granada", icone: "Sparkles", cor: "var(--fin-cat-5)" },
-  { nome: "Mestre", icone: "Star", cor: "var(--fin-warn)" },
-  { nome: "Lenda", icone: "Crown", cor: "var(--fin-accent)" },
+// Ordem de preciosidade. O ícone é o estágio da lapidação:
+//   Hexagon  = pedra bruta
+//   Diamond  = lapidação simples
+//   Gem      = lapidação brilhante
+// No topo, o diamante vermelho, a pedra mais rara que existe.
+const PEDRAS = [
+  ["Quartzo", "Hexagon"],
+  ["Ágata", "Hexagon"],
+  ["Malaquita", "Hexagon"],
+  ["Âmbar", "Hexagon"],
+  ["Citrino", "Hexagon"],
+  ["Peridoto", "Diamond"],
+  ["Granada", "Diamond"],
+  ["Turmalina", "Diamond"],
+  ["Topázio", "Diamond"],
+  ["Opala", "Diamond"],
+  ["Esmeralda", "Gem"],
+  ["Rubi", "Gem"],
+  ["Diamante", "Gem"],
+  ["Diamante Rosa", "Gem"],
+  ["Diamante Vermelho", "Gem"],
 ];
+
+export const PATAMARES = PEDRAS.map(([nome, icone], i) => ({
+  nome,
+  icone,
+  cor: `var(--fin-gema-${i + 1})`,
+}));
 
 // Divisão 0 é a IV (entrada do patamar) e 3 é a I (topo), como nos ranks
 // de jogo: o numeral DESCE enquanto você sobe.

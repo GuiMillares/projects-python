@@ -12,25 +12,15 @@
 // patamar + divisão + pips. Aqui só se desenha o que aquele módulo decide.
 
 import {
-  Award,
   Check,
-  Coins,
-  Crown,
   Diamond,
   Gem,
-  Hammer,
-  Leaf,
+  Hexagon,
   Loader2,
-  Medal,
-  Mountain,
   Plus,
-  Shield,
   Sparkles,
-  Sprout,
-  Star,
   Target,
   Trash2,
-  TreePine,
   Trophy,
   X,
 } from "lucide-react";
@@ -53,23 +43,7 @@ import { infoDoNivel } from "../services/niveis";
 
 // niveis.js guarda o ícone como string para ser testável no Node puro;
 // a tradução para componente acontece só aqui.
-const ICONES = {
-  Sprout,
-  Leaf,
-  TreePine,
-  Mountain,
-  Medal,
-  Coins,
-  Hammer,
-  Shield,
-  Award,
-  Trophy,
-  Gem,
-  Diamond,
-  Sparkles,
-  Star,
-  Crown,
-};
+const ICONES = { Hexagon, Diamond, Gem };
 
 const formularioVazio = () => ({
   titulo: "",
@@ -301,7 +275,7 @@ export default function Metas() {
   }
 
   const nivelInfo = infoDoNivel(personagem?.nivel ?? 1);
-  const IconePatamar = ICONES[nivelInfo.icone] ?? Sprout;
+  const IconePatamar = ICONES[nivelInfo.icone] ?? Hexagon;
 
   return (
     <>

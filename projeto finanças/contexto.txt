@@ -391,20 +391,15 @@ Gemini (a chave foi configurada neste PC):
 * Metas concluídas vão para a aba "Concluídas" (filtro fin-seg com
   contadores); concluir uma meta a move na hora.
 
->>> GEMINI_API_KEY JÁ CONFIGURADA NESTE PC (18/08/2026), como variável de
->>> ambiente permanente do Windows. O valor NÃO está neste arquivo nem em
->>> nenhum arquivo do repositório: o SDK lê do ambiente sozinho.
+>>> GEMINI_API_KEY MORA NO "projeto finanças/.env" desde 27/10/2026 (antes
+>>> era variável permanente do Windows, que foi APAGADA para não ter
+>>> prioridade sobre o .env). O .env está no .gitignore. api/config.py
+>>> carrega o .env e o SDK lê a chave do ambiente sozinho.
 >>>
->>> Em QUALQUER outro computador isso precisa ser feito de novo, uma vez
->>> por PC. Gere em aistudio.google.com/apikey e configure:
->>>   PowerShell (permanente):
->>>     [Environment]::SetEnvironmentVariable("GEMINI_API_KEY","AIza...","User")
->>>   Git Bash (permanente):
->>>     setx GEMINI_API_KEY "AIza..."
->>>   só na sessão atual:
->>>     $env:GEMINI_API_KEY = "AIza..."     # PowerShell
->>>     export GEMINI_API_KEY=AIza...       # Git Bash
->>> Vale a mesma pegadinha da seção 7: terminal já aberto não enxerga.
+>>> Para trocar: editar a linha GEMINI_API_KEY=... do .env (chave nova em
+>>> aistudio.google.com/apikey) e reiniciar a API. Em outro PC, copiar o
+>>> .env à mão. Uma variável do Windows com o mesmo nome ganha do .env:
+>>> se a troca "não pegar", conferir se alguém recriou a variável.
 >>> Sem a chave a tela funciona, só que o botão "sugerir os passos" vem
 >>> desabilitado explicando o que falta.
 >>> O SDK também aceita GOOGLE_API_KEY (com precedência), mas prefira
