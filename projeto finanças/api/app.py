@@ -352,6 +352,9 @@ def editar_transacao(transacao_id):
     if "ignorada" in d:
         campos.append("ignorada = %s")
         valores.append(1 if d.get("ignorada") else 0)
+        # Voltar a contar desfaz o "era o mesmo dinheiro" da conferência.
+        if not d.get("ignorada"):
+            campos.append("conferencia = IF(conferencia = 'errado', NULL, conferencia)")
     if not campos:
         return erro("Nada para alterar.")
 
@@ -1023,6 +1026,29 @@ def importar_openfinance():
     if aviso:
         return erro(aviso, 502)
 
+    # Descarte que o usuário marcou como errado na conferência volta para a
+    # soma: a regra continua achando que é movimento interno, mas a palavra
+    # final é dele.
+    # Só enquanto a decisão for a mesma que ele julgou: se a regra mudou o
+    # motivo ou o par, o veredito cai e o descarte volta a ser conferido.
+    restaurados = {
+        d["origem_id"]: (d["motivo"], d["par_origem_id"]) for d in buscar_todos(
+            "SELECT origem_id, motivo, par_origem_id FROM descartes "
+            "WHERE usuario_id = %s AND veredito = 'errado'",
+            (uid,),
+        )
+    }
+    auditaveis = [d for d in descartados if d["motivo"] in MOTIVOS_CONFERIDOS and d["data"]]
+    voltam = {
+        d["origem_id"] for d in auditaveis
+        if restaurados.get(d["origem_id"]) == (d["motivo"], d["par"])
+    }
+    for d in auditaveis:
+        if d["origem_id"] in voltam:
+            ignoradas[d["motivo"]] -= 1
+            lista.append({k: d[k] for k in CAMPOS_LANCAMENTO})
+    fora = [d["origem_id"] for d in descartados if d["origem_id"] not in voltam]
+
     regras = _regras(uid)
     for t in lista:
         t["categoria"] = _categoria_pela_regra(t["nome"], regras) or t["categoria"]
@@ -1052,13 +1078,14 @@ def importar_openfinance():
             )
         # O que a regra atual descarta sai do banco mesmo que uma importação
         # de antes da regra tenha deixado entrar. Só toca linha importada.
-        if descartados:
-            marcadores = ", ".join(["%s"] * len(descartados))
+        if fora:
+            marcadores = ", ".join(["%s"] * len(fora))
             cur.execute(
                 f"DELETE FROM transacoes WHERE usuario_id = %s AND origem_id IN ({marcadores})",
-                (uid, *descartados),
+                (uid, *fora),
             )
             removidas = cur.rowcount
+        _guardar_descartes(cur, uid, desde, auditaveis)
         cur.execute(
             "UPDATE conexoes_bancarias SET importado_ate = %s WHERE usuario_id = %s",
             (hoje, uid),
@@ -1073,6 +1100,240 @@ def importar_openfinance():
         "removidas": removidas,
         "ignoradas": ignoradas,
     })
+
+
+# ── Conferir números ─────────────────────────────────────────
+# Mede a regra que tira movimento interno da soma. De um lado, o que a
+# importação descartou (tabela `descartes`); do outro, importadas que
+# ficaram na soma mas parecem o mesmo dinheiro passando de uma conta para
+# outra. O usuário marca cada um como certo ou errado, e a taxa de acerto
+# sai daí.
+MOTIVOS_CONFERIDOS = ("pagamentoFatura", "transferencias")
+CAMPOS_LANCAMENTO = ("origem_id", "data", "nome", "valor", "natureza", "categoria", "meio")
+
+# A mesma folga da regra de pares (openfinance._FOLGA_PAR_DIAS): é o tempo
+# que um movimento interno leva para aparecer dos dois lados.
+_FOLGA_SUSPEITO = timedelta(days=5)
+
+
+def _guardar_descartes(cur, uid, desde, descartes):
+    """Grava o que esta importação deixou de fora, com motivo e par.
+
+    O veredito sobrevive enquanto motivo e par forem os mesmos; se a regra
+    mudou a decisão, ele volta a NULL para ser conferido de novo. O que
+    estava descartado no período e deixou de estar sai da tabela.
+    """
+    if descartes:
+        cur.executemany(
+            "INSERT INTO descartes (usuario_id, origem_id, data, nome, valor, natureza, meio, "
+            "conta, categoria, motivo, par_origem_id) "
+            "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) AS novo "
+            # O MySQL aplica as atribuições da esquerda para a direita: o
+            # veredito é decidido antes de motivo e par serem trocados.
+            "ON DUPLICATE KEY UPDATE "
+            "veredito = IF(descartes.motivo <=> novo.motivo "
+            "AND descartes.par_origem_id <=> novo.par_origem_id, descartes.veredito, NULL), "
+            "conferido_em = IF(descartes.veredito IS NULL, NULL, descartes.conferido_em), "
+            "data = novo.data, nome = novo.nome, valor = novo.valor, natureza = novo.natureza, "
+            "meio = novo.meio, conta = novo.conta, categoria = novo.categoria, "
+            "motivo = novo.motivo, par_origem_id = novo.par_origem_id",
+            [(uid, d["origem_id"], d["data"], d["nome"], d["valor"], d["natureza"], d["meio"],
+              d["conta"], d["categoria"], d["motivo"], d["par"]) for d in descartes],
+        )
+    ids = [d["origem_id"] for d in descartes]
+    fora = f" AND origem_id NOT IN ({', '.join(['%s'] * len(ids))})" if ids else ""
+    cur.execute(
+        f"DELETE FROM descartes WHERE usuario_id = %s AND data >= %s{fora}",
+        (uid, desde, *ids),
+    )
+
+
+def _suspeitos(linhas):
+    """Pares que ficaram na soma mas parecem o mesmo dinheiro: mesmo valor,
+    direções opostas, até _FOLGA_SUSPEITO de distância. Cada lançamento
+    entra em um par só, o mais próximo na data."""
+    receitas = {}
+    for l in linhas:
+        if l["natureza"] == "receita":
+            receitas.setdefault(l["valor"], []).append(l)
+
+    candidatos = []
+    for d in linhas:
+        if d["natureza"] != "despesa":
+            continue
+        for r in receitas.get(d["valor"], []):
+            dias = abs(r["data"] - d["data"])
+            if dias <= _FOLGA_SUSPEITO:
+                candidatos.append((dias, d["id"], r["id"], d, r))
+    candidatos.sort(key=lambda c: c[:3])
+
+    usados, pares = set(), []
+    for _, a, b, d, r in candidatos:
+        if a in usados or b in usados:
+            continue
+        usados.update((a, b))
+        pares.append((d, r))
+    pares.sort(key=lambda p: max(p[0]["data"], p[1]["data"]), reverse=True)
+    return pares
+
+
+def _item_conferencia(l):
+    return {
+        "id": l["id"],
+        "data": l["data"].isoformat(),
+        "nome": l["nome"],
+        "valor": float(l["valor"]),
+        "natureza": l["natureza"],
+        "meio": l["meio"],
+        "conta": l.get("conta"),
+        "categoria": l.get("categoria"),
+        "veredito": l.get("veredito"),
+    }
+
+
+@app.get("/api/conferencia")
+@exige_sessao()
+def ler_conferencia():
+    """Descartes agrupados por par, suspeitos e o placar da regra."""
+    uid = g.sessao["usuario_id"]
+    descartes = buscar_todos(
+        "SELECT id, origem_id, data, nome, valor, natureza, meio, conta, motivo, "
+        "par_origem_id, veredito FROM descartes WHERE usuario_id = %s "
+        "ORDER BY data DESC, id DESC",
+        (uid,),
+    )
+
+    # Os dois lados de um par viram um grupo só, a saída primeiro: lido de
+    # cima para baixo, é "saiu daqui, chegou ali".
+    por_origem = {d["origem_id"]: d for d in descartes}
+    grupos, vistos = [], set()
+    for d in descartes:
+        if d["id"] in vistos:
+            continue
+        par = por_origem.get(d["par_origem_id"])
+        itens = [d] + ([par] if par and par["id"] not in vistos else [])
+        vistos.update(i["id"] for i in itens)
+        itens.sort(key=lambda i: i["natureza"] != "despesa")
+        grupos.append({"motivo": d["motivo"], "itens": [_item_conferencia(i) for i in itens]})
+
+    # Descarte devolvido à soma pelo usuário não entra: ele já disse que
+    # aquilo é gasto de verdade, e o par dele continua descartado.
+    linhas = buscar_todos(
+        "SELECT id, data, nome, valor, natureza, meio, categoria FROM transacoes "
+        "WHERE usuario_id = %s AND origem_id IS NOT NULL AND ignorada = 0 "
+        "AND conferencia IS NULL AND data >= %s "
+        "AND origem_id NOT IN (SELECT origem_id FROM descartes WHERE usuario_id = %s) "
+        "ORDER BY data, id",
+        (uid, date.today() - timedelta(days=400), uid),
+    )
+    suspeitos = _suspeitos(linhas)
+
+    # Os quatro jeitos de a regra acertar ou errar, contados em lançamentos:
+    # descartou certo, descartou errado, manteve certo, faltou descartar.
+    conferidas = {
+        l["conferencia"]: l["n"] for l in buscar_todos(
+            "SELECT conferencia, COUNT(*) AS n FROM transacoes "
+            "WHERE usuario_id = %s AND conferencia IS NOT NULL GROUP BY conferencia",
+            (uid,),
+        )
+    }
+
+    return jsonify({
+        "resumo": {
+            "descartes": len(descartes),
+            "certos": sum(1 for d in descartes if d["veredito"] == "certo"),
+            "errados": sum(1 for d in descartes if d["veredito"] == "errado"),
+            "mantidos": conferidas.get("certo", 0),
+            "faltaram": conferidas.get("errado", 0),
+            "suspeitos": len(suspeitos),
+        },
+        "grupos": grupos,
+        "suspeitos": [
+            {"itens": [_item_conferencia(d), _item_conferencia(r)]} for d, r in suspeitos
+        ],
+    })
+
+
+@app.put("/api/conferencia/descartes/<int:descarte_id>")
+@exige_sessao()
+def julgar_descarte(descarte_id):
+    """Certo, errado, ou de volta a não conferido (null).
+
+    'errado' põe o lançamento de volta em Entradas e Saídas na hora, e as
+    importações seguintes respeitam; desfazer o tira de novo.
+    """
+    veredito = (request.get_json(silent=True) or {}).get("veredito")
+    if veredito not in ("certo", "errado", None):
+        return erro("Veredito inválido.")
+
+    uid = g.sessao["usuario_id"]
+    d = buscar_um(
+        "SELECT origem_id, data, nome, valor, natureza, meio, categoria, veredito "
+        "FROM descartes WHERE id = %s AND usuario_id = %s",
+        (descarte_id, uid),
+    )
+    if not d:
+        return erro("Descarte não encontrado.", 404)
+    categoria = _categoria_pela_regra(d["nome"], _regras(uid)) or d["categoria"]
+
+    with cursor(commit=True) as cur:
+        cur.execute(
+            "UPDATE descartes SET veredito = %s, conferido_em = IF(%s IS NULL, NULL, NOW()) "
+            "WHERE id = %s AND usuario_id = %s",
+            (veredito, veredito, descarte_id, uid),
+        )
+        if veredito == "errado" and d["veredito"] != "errado":
+            cur.execute(
+                "INSERT INTO transacoes (usuario_id, data, nome, valor, natureza, "
+                "categoria, recorrencia, meio, origem_id) "
+                "VALUES (%s, %s, %s, %s, %s, %s, 'unica', %s, %s) AS novo "
+                "ON DUPLICATE KEY UPDATE meio = novo.meio",
+                (uid, d["data"], d["nome"], d["valor"], d["natureza"], categoria,
+                 d["meio"], d["origem_id"]),
+            )
+        elif d["veredito"] == "errado" and veredito != "errado":
+            cur.execute(
+                "DELETE FROM transacoes WHERE usuario_id = %s AND origem_id = %s",
+                (uid, d["origem_id"]),
+            )
+    return jsonify({"ok": True})
+
+
+@app.post("/api/conferencia/suspeitos")
+@exige_sessao()
+def julgar_suspeito():
+    """Julga um par suspeito de uma vez.
+
+    'errado': os dois são o mesmo dinheiro mudando de conta, então saem da
+    soma como "não conta". 'certo': contar os dois está certo, e o par não
+    volta a aparecer.
+    """
+    d = request.get_json(silent=True) or {}
+    ids, veredito = d.get("ids"), d.get("veredito")
+    if (
+        veredito not in ("certo", "errado")
+        or not isinstance(ids, list)
+        or len(set(ids)) != 2
+        or not all(isinstance(i, int) for i in ids)
+    ):
+        return erro("Pedido inválido.")
+
+    uid = g.sessao["usuario_id"]
+    achados = buscar_um(
+        "SELECT COUNT(*) AS n FROM transacoes WHERE usuario_id = %s "
+        "AND origem_id IS NOT NULL AND id IN (%s, %s)",
+        (uid, *ids),
+    )["n"]
+    if achados != 2:
+        return erro("Lançamento não encontrado.", 404)
+
+    with cursor(commit=True) as cur:
+        cur.execute(
+            "UPDATE transacoes SET conferencia = %s, ignorada = IF(%s = 'errado', 1, ignorada) "
+            "WHERE usuario_id = %s AND id IN (%s, %s)",
+            (veredito, veredito, uid, *ids),
+        )
+    return jsonify({"ok": True})
 
 
 # ── Regras de categoria ──────────────────────────────────────

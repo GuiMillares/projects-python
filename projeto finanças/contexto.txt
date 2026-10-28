@@ -140,6 +140,7 @@ PRONTAS:
   Investimentos (carteira com cotação da B3)
   Metas gamificadas (XP, nível, subtarefas sugeridas por IA)
   Configurações (perfil, foto, senha, 2FA, orçamentos)
+  Conferir números (/app/contas/conferir, ver seção 8b)
 
 NÃO HÁ MAIS TELA PLACEHOLDER. O componente EmBreve.jsx foi removido.
 
@@ -309,6 +310,23 @@ FASE 1 "NÚMEROS CERTOS" (27/10/2026)
 * WEBHOOK NÃO foi feito, de propósito: a API só escuta em 127.0.0.1 e a
   Pluggy não alcança sem túnel público. A tela relê o status a cada 5s.
   Reavaliar quando/se o app for para servidor.
+
+CONFERIR NÚMEROS (28/10/2026), tela /app/contas/conferir:
+* Mede a regra acima. Cada importação grava na tabela `descartes` o que
+  ficou de fora por pagamentoFatura/transferencias, com o par que
+  _descartar_pares achou (ela agora devolve {índice: índice do par}).
+* Aba "Saíram da soma": o usuário marca cada descarte certo ou errado.
+  ERRADO DEVOLVE O LANÇAMENTO para transacoes na hora, e a importação
+  respeita enquanto motivo e par forem os mesmos. Se a regra mudar o motivo
+  ou o par, o veredito volta a NULL e o lançamento sai de novo.
+* Aba "Ficaram na soma": importadas que contam, de mesmo valor e direções
+  opostas, até 5 dias. Errado = os dois viram "não conta" com
+  transacoes.conferencia = 'errado'; voltar a contar em Lançamentos limpa.
+* Placar = (descartes certos + suspeitos mantidos) / tudo que foi
+  conferido, em lançamentos. É a taxa de erro medida que faltava para
+  dizer quanto dá para confiar nos totais.
+* 66 asserções contra Pluggy simulada (rotas reais + MySQL, usuários
+  descartáveis). Tela conferida em 800px e 375px, temas claro e escuro.
 
 >>> CREDENCIAIS: FIN_PLUGGY_CLIENT_ID e FIN_PLUGGY_CLIENT_SECRET no arquivo
 >>> "projeto finanças/.env" (está no .gitignore), lido por api/config.py.

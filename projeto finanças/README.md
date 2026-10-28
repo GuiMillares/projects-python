@@ -157,6 +157,7 @@ dois tamanhos. Verificado sem rolagem lateral até 320px de largura.
 | Investimentos (carteira com cotação da B3) | pronta |
 | Metas gamificadas (XP, nível, subtarefas por IA) | pronta |
 | Configurações (perfil, foto, senha, 2FA, orçamentos) | pronta |
+| Conferir números (acerto da regra que tira movimento interno da soma) | pronta |
 
 Não há mais tela placeholder: `EmBreve.jsx` foi removido.
 

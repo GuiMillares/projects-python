@@ -21,6 +21,7 @@ import {
   PiggyBank,
   Plug,
   RefreshCw,
+  SearchCheck,
   Trash2,
   Wallet,
   X,
@@ -250,6 +251,13 @@ export default function Contas() {
           <div className="fin-form__actions">
             <button
               className="fin-btn fin-btn--ghost"
+              onClick={() => navigate("/app/contas/conferir")}
+              title="Conferir o que a importação tirou da soma"
+            >
+              <SearchCheck size={14} /> Conferir números
+            </button>
+            <button
+              className="fin-btn fin-btn--ghost"
               onClick={sincronizarTudo}
               disabled={atualizando || sincronizando.size > 0}
               title="Pedir aos bancos os dados de agora"
@@ -332,7 +340,9 @@ export default function Contas() {
             </div>
           </form>
 
-          {resultado && <ResultadoImportacao r={resultado} />}
+          {resultado && (
+            <ResultadoImportacao r={resultado} onConferir={() => navigate("/app/contas/conferir")} />
+          )}
         </div>
       )}
 
@@ -480,7 +490,7 @@ export default function Contas() {
   );
 }
 
-function ResultadoImportacao({ r }) {
+function ResultadoImportacao({ r, onConferir }) {
   const ig = r.ignoradas || {};
   const fora = [
     ig.pagamentoFatura && `${ig.pagamentoFatura} pagamentos de fatura`,
@@ -492,13 +502,18 @@ function ResultadoImportacao({ r }) {
   return (
     <div className="fin-banner" style={{ "--bc": "var(--fin-accent)", marginTop: 13, marginBottom: 0 }}>
       <Check size={16} />
-      <span>
+      <span style={{ flex: 1 }}>
         <strong>
           {r.novas} {r.novas === 1 ? "transação nova" : "transações novas"}
         </strong>
         {r.jaExistiam > 0 && `, ${r.jaExistiam} já estavam no app`}.
         {fora.length > 0 && ` Ficaram de fora: ${fora.join(", ")}.`}
       </span>
+      {(ig.pagamentoFatura > 0 || ig.transferencias > 0) && (
+        <button className="fin-btn fin-btn--ghost fin-btn--sm" onClick={onConferir}>
+          <SearchCheck size={13} /> Conferir
+        </button>
+      )}
     </div>
   );
 }

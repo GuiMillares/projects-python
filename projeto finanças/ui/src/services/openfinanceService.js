@@ -21,6 +21,36 @@ export const sincronizar = (id) => api.post(`/api/openfinance/conexoes/${id}/atu
 
 export const importarTransacoes = (desde) => api.post("/api/openfinance/importar", { desde });
 
+/** Descartes da importação agrupados por par, pares suspeitos e o placar. */
+export const lerConferencia = () => api.get("/api/conferencia");
+
+/**
+ * veredito: "certo", "errado" ou null (volta a não conferido). "errado"
+ * devolve o lançamento para Entradas e Saídas.
+ */
+export const julgarDescarte = (id, veredito) =>
+  api.put(`/api/conferencia/descartes/${id}`, { veredito });
+
+/** "errado" tira os dois da soma (mesmo dinheiro mudando de conta). */
+export const julgarSuspeito = (ids, veredito) =>
+  api.post("/api/conferencia/suspeitos", { ids, veredito });
+
+/**
+ * Placar da regra, em lançamentos conferidos. Ela acerta quando descarta o
+ * que era movimento interno (certos) e quando mantém o que não era
+ * (mantidos); erra quando descarta gasto de verdade (errados) e quando
+ * deixa o mesmo dinheiro contar duas vezes (faltaram).
+ */
+export function placarDaRegra({ certos, errados, mantidos, faltaram }) {
+  const acertos = certos + mantidos;
+  const julgados = acertos + errados + faltaram;
+  return {
+    acertos,
+    julgados,
+    acerto: julgados ? Math.round((acertos / julgados) * 100) : null,
+  };
+}
+
 // A visão geral importa sozinha ao abrir, mas não a cada troca de tela:
 // cada importação lê todas as contas na Pluggy.
 const INTERVALO_IMPORTACAO_MS = 15 * 60 * 1000;

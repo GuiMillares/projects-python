@@ -86,6 +86,10 @@ CREATE TABLE IF NOT EXISTS transacoes (
   recorrencia ENUM('unica','mensal')     NOT NULL DEFAULT 'unica',
   -- Fica no histórico mas sai de totais e gráficos (dinheiro de passagem).
   ignorada    TINYINT(1)      NOT NULL DEFAULT 0,
+  -- Tela Conferir números, só nas importadas que pareciam movimento
+  -- interno e ficaram na soma: 'certo' = contar está certo; 'errado' =
+  -- era o mesmo dinheiro de outro lançamento (a tela também a ignora).
+  conferencia ENUM('certo','errado') NULL,
   -- Só nas importadas: a previsão do mês não desconta da conta o que vai
   -- para a fatura do cartão.
   meio        ENUM('conta','cartao') NULL,
@@ -224,5 +228,36 @@ CREATE TABLE IF NOT EXISTS regras_categoria (
   PRIMARY KEY (id),
   UNIQUE KEY uq_regras_padrao (usuario_id, padrao),
   CONSTRAINT fk_regras_usuario FOREIGN KEY (usuario_id)
+    REFERENCES usuarios (id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ── Descartes da importação ─────────────────────────────────
+-- O que a importação do Open Finance deixou FORA da soma (pagamento de
+-- fatura, transferência entre as próprias contas), com o par que a regra
+-- achou. Existe para a tela Conferir números: cada descarte é marcado como
+-- certo ou errado, e daí sai a taxa de acerto da regra.
+-- `veredito` volta a NULL quando a regra muda o motivo ou o par: o que foi
+-- conferido era outra decisão. 'errado' devolve o lançamento para a soma,
+-- e as importações seguintes respeitam isso.
+CREATE TABLE IF NOT EXISTS descartes (
+  id            BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  usuario_id    INT UNSIGNED    NOT NULL,
+  origem_id     VARCHAR(64)     NOT NULL,
+  data          DATE            NOT NULL,
+  nome          VARCHAR(160)    NOT NULL,
+  valor         DECIMAL(12,2)   NOT NULL,
+  natureza      ENUM('receita','despesa') NOT NULL,
+  meio          ENUM('conta','cartao')    NOT NULL,
+  -- Nome da conta ou do cartão na Pluggy: é o que diz de onde saiu.
+  conta         VARCHAR(120)    NOT NULL DEFAULT '',
+  categoria     VARCHAR(80)     NOT NULL DEFAULT 'Sem categoria',
+  motivo        ENUM('pagamentoFatura','transferencias') NOT NULL,
+  par_origem_id VARCHAR(64)     NULL,
+  veredito      ENUM('certo','errado') NULL,
+  conferido_em  DATETIME        NULL,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_descartes_origem (usuario_id, origem_id),
+  KEY ix_descartes_usuario_data (usuario_id, data),
+  CONSTRAINT fk_descartes_usuario FOREIGN KEY (usuario_id)
     REFERENCES usuarios (id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

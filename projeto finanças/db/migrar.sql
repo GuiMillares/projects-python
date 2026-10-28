@@ -197,3 +197,38 @@ CREATE TABLE IF NOT EXISTS regras_categoria (
   CONSTRAINT fk_regras_usuario FOREIGN KEY (usuario_id)
     REFERENCES usuarios (id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 2026-10: tela Conferir números. Os descartes da importação passam a ser
+-- guardados com motivo e par, e cada um recebe o veredito do usuário; nas
+-- importadas que ficaram na soma, `conferencia` guarda o mesmo julgamento.
+CREATE TABLE IF NOT EXISTS descartes (
+  id            BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  usuario_id    INT UNSIGNED    NOT NULL,
+  origem_id     VARCHAR(64)     NOT NULL,
+  data          DATE            NOT NULL,
+  nome          VARCHAR(160)    NOT NULL,
+  valor         DECIMAL(12,2)   NOT NULL,
+  natureza      ENUM('receita','despesa') NOT NULL,
+  meio          ENUM('conta','cartao')    NOT NULL,
+  conta         VARCHAR(120)    NOT NULL DEFAULT '',
+  categoria     VARCHAR(80)     NOT NULL DEFAULT 'Sem categoria',
+  motivo        ENUM('pagamentoFatura','transferencias') NOT NULL,
+  par_origem_id VARCHAR(64)     NULL,
+  veredito      ENUM('certo','errado') NULL,
+  conferido_em  DATETIME        NULL,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_descartes_origem (usuario_id, origem_id),
+  KEY ix_descartes_usuario_data (usuario_id, data),
+  CONSTRAINT fk_descartes_usuario FOREIGN KEY (usuario_id)
+    REFERENCES usuarios (id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+SET @falta := (
+  SELECT COUNT(*) = 0 FROM information_schema.COLUMNS
+   WHERE TABLE_SCHEMA = 'local_finance' AND TABLE_NAME = 'transacoes'
+     AND COLUMN_NAME = 'conferencia'
+);
+SET @sql := IF(@falta,
+  'ALTER TABLE transacoes ADD COLUMN conferencia ENUM(''certo'',''errado'') NULL AFTER ignorada',
+  'SELECT "transacoes.conferencia já existe" AS aviso');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;

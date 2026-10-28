@@ -38,6 +38,7 @@ const NAV = [
 const TITULOS = {
   "/app": "Visão geral",
   "/app/contas": "Contas",
+  "/app/contas/conferir": "Conferir números",
   "/app/entradas": "Entradas",
   "/app/saidas": "Saídas",
   "/app/investimentos": "Investimentos",

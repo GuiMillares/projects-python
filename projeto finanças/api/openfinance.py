@@ -657,7 +657,9 @@ def _descartar_pares(brutas, motivos):
     a saída do pagamento só com o próprio nome e categoria "Loans", e ela
     contava como despesa em cima das compras do cartão. O par é
     o lançamento de direção oposta, mesmo valor, em OUTRA conta conectada,
-    em até _FOLGA_PAR_DIAS. Altera `motivos` no lugar.
+    em até _FOLGA_PAR_DIAS. Altera `motivos` no lugar e devolve quem casou
+    com quem ({índice: índice do par}, nos dois sentidos), que a tela de
+    conferência mostra ao lado de cada descarte.
 
     Duas passadas, e a ordem importa. Quando os DOIS lados já vêm marcados
     (de um banco para outro, "same person" nas duas pontas), eles precisam
@@ -693,6 +695,7 @@ def _descartar_pares(brutas, motivos):
             livres.setdefault(chave(k), []).append(k)
 
     usados = set()
+    pares = {}
     sozinhas = []
     for k in [k for lista in marcadas.values() for k in lista]:
         if k in usados:
@@ -703,6 +706,7 @@ def _descartar_pares(brutas, motivos):
             sozinhas.append(k)
         else:
             usados.update((k, j))
+            pares[k], pares[j] = j, k
 
     # Só o pagamento recebido no cartão procura par livre: ele sempre sai
     # de alguma conta, e nos dados reais o par certo apareceu em todos os
@@ -718,18 +722,36 @@ def _descartar_pares(brutas, motivos):
         j = melhor_par(k, livres.get((valor, not saida), []))
         if j is not None:
             usados.update((k, j))
+            pares[k], pares[j] = j, k
             motivos[j] = m
+    return pares
 
 
-def transacoes(item_ids, desde: date) -> tuple[list[dict], dict, list[str], str | None]:
+def _lancamento(t, credito):
+    """Transação da Pluggy no formato da tabela `transacoes`."""
+    return {
+        "origem_id": str(t["id"])[:64],
+        "data": _data(t.get("date")),
+        "nome": (t.get("description") or "").strip()[:160] or "Sem descrição",
+        "valor": _valor(t),
+        "natureza": "despesa" if _e_saida(t, credito) else "receita",
+        "categoria": _categoria(t),
+        "meio": "cartao" if credito else "conta",
+    }
+
+
+def transacoes(item_ids, desde: date) -> tuple[list[dict], dict, list[dict], str | None]:
     """Lançamentos das conexões, prontos para a tabela `transacoes`.
 
     @return (lançamentos, contagem do que foi deixado de fora por motivo,
-             ids de origem descartados, aviso). Os descartados servem para
-             tirar do banco o que uma importação antiga deixou entrar antes
-             de a regra existir. Se qualquer conexão falhar, a lista volta
-             vazia: é melhor não importar nada do que importar metade sem
-             avisar.
+             descartados, aviso). Os descartados servem para tirar do banco
+             o que uma importação antiga deixou entrar antes de a regra
+             existir, e para a tela de conferência: cada um vem no formato
+             de um lançamento, mais `motivo`, `conta` e o `par` (id de
+             origem do outro lado, quando a regra casou os dois). Pendente
+             não entra: muda de id quando compensa. Se qualquer conexão
+             falhar, a lista volta vazia: é melhor não importar nada do que
+             importar metade sem avisar.
     """
     ignorados = {"pendentes": 0, "pagamentoFatura": 0, "transferencias": 0, "semValor": 0}
     if not disponivel():
@@ -745,27 +767,25 @@ def transacoes(item_ids, desde: date) -> tuple[list[dict], dict, list[str], str 
             brutas += [(c, credito, t) for t in _transacoes_da_conta(c["id"], desde, date.today())]
 
         motivos = [_motivo_para_ignorar(t, credito, tem_cartao) for _, credito, t in brutas]
-        _descartar_pares(brutas, motivos)
+        pares = _descartar_pares(brutas, motivos)
 
         saida, descartados = [], []
-        for (c, credito, t), motivo in zip(brutas, motivos):
+        for k, ((c, credito, t), motivo) in enumerate(zip(brutas, motivos)):
             if motivo:
                 ignorados[motivo] += 1
                 if t.get("id") and motivo != "pendentes":
-                    descartados.append(str(t["id"])[:64])
+                    j = pares.get(k)
+                    par = brutas[j][2].get("id") if j is not None else None
+                    descartados.append({
+                        **_lancamento(t, credito),
+                        "motivo": motivo,
+                        "conta": _nome_conta(c)[:120],
+                        "par": str(par)[:64] if par else None,
+                    })
                 continue
-            d = _data(t.get("date"))
-            if not d or not t.get("id"):
+            if not _data(t.get("date")) or not t.get("id"):
                 continue
-            saida.append({
-                "origem_id": str(t["id"])[:64],
-                "data": d,
-                "nome": (t.get("description") or "").strip()[:160] or "Sem descrição",
-                "valor": _valor(t),
-                "natureza": "despesa" if _e_saida(t, credito) else "receita",
-                "categoria": _categoria(t),
-                "meio": "cartao" if credito else "conta",
-            })
+            saida.append(_lancamento(t, credito))
         return saida, ignorados, descartados, None
     except _FalhaPluggy as e:
         return [], ignorados, [], str(e)
