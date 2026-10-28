@@ -141,6 +141,10 @@ PRONTAS:
   Metas gamificadas (XP, nível, subtarefas sugeridas por IA)
   Configurações (perfil, foto, senha, 2FA, orçamentos)
   Conferir números (/app/contas/conferir, ver seção 8b)
+  LGPD: /aceite, /termos, /privacidade e o card Seus dados em
+    Configurações (exportar e apagar a conta). Textos e VERSAO em
+    api/documentos.py; rota de dado sem aceite da versão atual dá 428.
+    Para mudar o texto de sentido, suba a VERSAO. Ver README, seção LGPD.
 
 NÃO HÁ MAIS TELA PLACEHOLDER. O componente EmBreve.jsx foi removido.
 

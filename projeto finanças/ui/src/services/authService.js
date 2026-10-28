@@ -57,12 +57,15 @@ export const temToken = () => Boolean(lerToken());
  * A sessão do servidor é a fonte da verdade. Um token guardado pode já
  * ter expirado, e só o servidor sabe se ele passou pelo 2FA. Por isso
  * quem decide se está autenticado é esta chamada, não o sessionStorage.
+ *
+ * @returns {"ok"|"aceite"|false} "aceite" = sessão boa, mas falta aceitar a
+ *   versão atual dos termos e da política de privacidade.
  */
 export async function sessaoValida() {
   if (!lerToken()) return false;
   try {
-    await api.get("/api/perfil");
-    return true;
+    const perfil = await api.get("/api/perfil");
+    return perfil.aceitePendente ? "aceite" : "ok";
   } catch {
     return false;
   }

@@ -2078,6 +2078,191 @@ textarea {
 }
 
 /* ============================================================
+   TERMOS, PRIVACIDADE E ACEITE
+   ============================================================ */
+/* Páginas fora da casca do app (sem menu): aceite e documentos. Uma
+   coluna de leitura, como uma folha, e não um painel. */
+.fin-legal {
+  min-height: 100vh;
+  background: var(--fin-bg);
+  color: var(--fin-text);
+  display: flex;
+  justify-content: center;
+  padding: 28px 16px calc(28px + env(safe-area-inset-bottom));
+}
+
+.fin-legal__col {
+  width: 100%;
+  max-width: 720px;
+}
+
+.fin-legal__topo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.fin-legal__marca {
+  margin-bottom: 22px;
+}
+
+.fin-legal__papel {
+  padding: 22px 24px;
+}
+
+.fin-doc {
+  font-size: 13px;
+  line-height: 1.6;
+  max-width: 68ch;
+}
+
+.fin-doc__titulo {
+  font-size: 1.15rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.fin-doc__versao {
+  font-size: 11.5px;
+  color: var(--fin-muted);
+  margin: 2px 0 6px;
+}
+
+.fin-doc h2 {
+  font-size: 12.5px;
+  font-weight: 700;
+  margin: 18px 0 6px;
+}
+
+.fin-doc p {
+  margin: 0 0 8px;
+}
+
+.fin-doc ul {
+  margin: 0 0 8px;
+  padding-left: 18px;
+}
+
+.fin-doc li {
+  margin-bottom: 5px;
+}
+
+.fin-aceite__resumo {
+  list-style: none;
+  margin: 16px 0 18px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  font-size: 12.5px;
+}
+
+.fin-aceite__resumo li {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.fin-aceite__resumo svg {
+  color: var(--fin-accent);
+  flex-shrink: 0;
+  margin-top: 3px;
+}
+
+/* O texto inteiro rola dentro da caixa: o checkbox e o botão ficam à
+   vista sem a pessoa ter de descer a página toda. */
+.fin-aceite__leitura {
+  margin-top: 10px;
+  max-height: 46vh;
+  overflow-y: auto;
+  padding: 18px 20px;
+  background: var(--fin-surface);
+  border: 1px solid var(--fin-border);
+  border-radius: var(--fin-radius-lg);
+}
+
+.fin-aceite__leitura:focus-visible {
+  outline: 2px solid var(--fin-accent-mid);
+  outline-offset: 2px;
+}
+
+.fin-aceite__form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-top: 16px;
+}
+
+.fin-aceite__form .fin-check-linha {
+  align-items: flex-start;
+}
+
+.fin-aceite__form .fin-check-linha input {
+  margin-top: 3px;
+}
+
+.fin-aceite__apagar {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: none;
+  background: none;
+  padding: 0;
+  font-family: inherit;
+  font-size: 11.5px;
+  color: var(--fin-muted);
+  cursor: pointer;
+}
+
+.fin-aceite__apagar:hover {
+  color: var(--fin-danger);
+}
+
+.fin-login__legal {
+  margin-top: 22px;
+  text-align: center;
+  font-size: 11px;
+  color: var(--fin-muted);
+}
+
+.fin-login__legal a,
+.fin-cfg-grid a {
+  color: var(--fin-accent);
+}
+
+/* Linha de ação do card Seus dados: o que faz à esquerda, o botão à
+   direita; no celular o botão desce. */
+.fin-cfg-dados {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 16px;
+  flex-wrap: wrap;
+  padding: 12px 0;
+  border-top: 1px solid var(--fin-border);
+}
+
+.fin-cfg-dados > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1 1 260px;
+  min-width: 0;
+}
+
+.fin-cfg-dados strong {
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.fin-apagar__campos {
+  margin: 14px 0 4px;
+}
+
+/* ============================================================
    MODAL DE CONFIRMAÇÃO
    ============================================================ */
 

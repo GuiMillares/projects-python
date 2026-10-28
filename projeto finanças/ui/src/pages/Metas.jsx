@@ -454,6 +454,12 @@ export default function Metas() {
                 )}
               </span>
             </label>
+            {/* Aviso da política de privacidade, seção 5: é aqui que o dado sai. */}
+            {form.gerarSubtarefas && iaDisponivel && (
+              <span className="fin-field__hint">
+                O título, os detalhes, o valor e o prazo da meta vão para o Google Gemini.
+              </span>
+            )}
 
             <div className="fin-form__actions">
               <button className="fin-btn fin-btn--primary fin-btn--sm" disabled={salvando}>
@@ -651,6 +657,7 @@ export default function Metas() {
                       className="fin-btn fin-btn--outline fin-btn--sm"
                       onClick={() => gerarPassos(meta)}
                       disabled={gerando === meta.id}
+                      title="Manda o título, os detalhes, o valor e o prazo da meta para o Google Gemini"
                     >
                       {gerando === meta.id ? (
                         <>

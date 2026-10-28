@@ -64,6 +64,14 @@ BLOQUEIO_MINUTOS = 15
 
 EMISSOR_TOTP = os.getenv("FIN_TOTP_EMISSOR", "Financas")
 
+# ── LGPD ─────────────────────────────────────────────────────
+# Quem responde pelos dados desta instalação (o controlador) e como falar
+# com essa pessoa. Aparecem na política de privacidade. Ficam no .env, e
+# não no código, porque o repositório é público e cada instalação tem o
+# seu responsável.
+CONTROLADOR_NOME = os.getenv("FIN_CONTROLADOR_NOME", "").strip()
+CONTROLADOR_CONTATO = os.getenv("FIN_CONTROLADOR_CONTATO", "").strip()
+
 # ── Cotações (brapi.dev) ─────────────────────────────────────
 BRAPI_BASE = os.getenv("FIN_BRAPI_BASE", "https://brapi.dev/api")
 

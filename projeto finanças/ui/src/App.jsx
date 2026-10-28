@@ -2,10 +2,12 @@ import { useEffect, useState } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import AppLayout from "./components/AppLayout";
 import { PerfilProvider } from "./context/PerfilProvider";
+import Aceite from "./pages/Aceite";
 import Configuracoes from "./pages/Configuracoes";
 import Conferir from "./pages/Conferir";
 import Contas from "./pages/Contas";
 import Dashboard from "./pages/Dashboard";
+import Documento from "./pages/Documento";
 import Investimentos from "./pages/Investimentos";
 import Lancamentos from "./pages/Lancamentos";
 import Login from "./pages/Login";
@@ -18,17 +20,19 @@ import { sessaoValida } from "./services/authService";
  * Quem decide é o servidor: `sessaoValida` bate na API e só passa se a
  * sessão existir, não tiver expirado E já tiver passado pelo 2FA. Um
  * token forjado no sessionStorage não abre nada: as rotas de dado
- * exigem a mesma checagem do outro lado.
+ * exigem a mesma checagem do outro lado. Sessão boa sem o aceite da
+ * versão atual dos termos vai para /aceite.
  */
 function ExigeSessao({ children }) {
   const [estado, setEstado] = useState("verificando");
 
   useEffect(() => {
-    sessaoValida().then((ok) => setEstado(ok ? "ok" : "negado"));
+    sessaoValida().then((r) => setEstado(r || "negado"));
   }, []);
 
   if (estado === "verificando") return null;
   if (estado === "negado") return <Navigate to="/login" replace />;
+  if (estado === "aceite") return <Navigate to="/aceite" replace />;
   return children;
 }
 
@@ -36,6 +40,9 @@ export default function App() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
+      <Route path="/aceite" element={<Aceite />} />
+      <Route path="/termos" element={<Documento tipo="termos" />} />
+      <Route path="/privacidade" element={<Documento tipo="privacidade" />} />
 
       <Route
         path="/app/*"

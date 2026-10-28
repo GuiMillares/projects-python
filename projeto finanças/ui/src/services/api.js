@@ -47,6 +47,11 @@ async function pedir(caminho, { metodo = "GET", corpo } = {}) {
   if (resp.status === 204) return null;
 
   const dados = await resp.json().catch(() => ({}));
+  // 428: a versão dos termos mudou com o app aberto. Qualquer tela que
+  // bater nisso vai para o aceite, em vez de cada uma tratar o caso.
+  if (resp.status === 428 && window.location.pathname !== "/aceite") {
+    window.location.assign("/aceite");
+  }
   if (!resp.ok) throw new ApiError(dados.erro || "Falha na requisição.", resp.status);
   return dados;
 }
@@ -56,5 +61,5 @@ export const api = {
   post: (c, corpo) => pedir(c, { metodo: "POST", corpo }),
   put: (c, corpo) => pedir(c, { metodo: "PUT", corpo }),
   patch: (c, corpo) => pedir(c, { metodo: "PATCH", corpo }),
-  del: (c) => pedir(c, { metodo: "DELETE" }),
+  del: (c, corpo) => pedir(c, { metodo: "DELETE", corpo }),
 };

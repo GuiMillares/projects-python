@@ -112,6 +112,34 @@ Outros pontos, todos com teste ponta a ponta passando:
   gravar `data:text/html,<script>` e o `<img src>` viraria injeção.
 - A API escuta só em `127.0.0.1` e aceita um conjunto fechado de origens.
 
+## LGPD
+
+Os termos de uso e a política de privacidade moram em `api/documentos.py`,
+com uma `VERSAO`. Toda rota de dado devolve **428** enquanto a pessoa não
+aceitar a versão atual, e o app manda para `/aceite`. Cada aceite vira uma
+linha na tabela `aceites` (versão, data e hora), sem sobrescrever: é a prova
+do consentimento. Mudou algo que muda o sentido do texto? Suba a `VERSAO` e
+todo mundo aceita de novo.
+
+Em Configurações → Seus dados e privacidade:
+
+- **Exportar meus dados** baixa um JSON com tudo o que tem `usuario_id`
+  (`SELECT *`, então coluna nova entra sozinha). Ficam de fora só o resumo
+  da senha, o segredo do TOTP e as sessões.
+- **Apagar minha conta** pede a senha e, com o 2FA ativo, o código. O resto
+  vai em cascata pelas chaves estrangeiras. Erro conta tentativa, como no
+  login.
+
+Quem responde pelos dados da instalação aparece na política de privacidade.
+Configure no `.env` (fica fora do repositório):
+
+```
+FIN_CONTROLADOR_NOME=Seu nome
+FIN_CONTROLADOR_CONTATO=um e-mail para assuntos de dados
+```
+
+Sem as duas, a política diz "a pessoa que mantém esta instalação do app".
+
 ## Design
 
 Paleta **Oliva & Terracota**: base neutra quente (marrom-tinta no escuro,
@@ -158,6 +186,7 @@ dois tamanhos. Verificado sem rolagem lateral até 320px de largura.
 | Metas gamificadas (XP, nível, subtarefas por IA) | pronta |
 | Configurações (perfil, foto, senha, 2FA, orçamentos) | pronta |
 | Conferir números (acerto da regra que tira movimento interno da soma) | pronta |
+| Aceite dos termos, documentos, exportar e apagar a conta (LGPD) | pronta |
 
 Não há mais tela placeholder: `EmBreve.jsx` foi removido.
 

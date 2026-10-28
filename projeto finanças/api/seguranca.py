@@ -71,12 +71,17 @@ def criar_sessao(usuario_id: int, dois_fatores_ok: bool = False) -> str:
 
 
 def ler_sessao(token: str):
+    """A sessão já vem com a versão dos termos que o usuário aceitou por
+    último: exige_sessao cobra o aceite em toda rota de dado, e uma
+    consulta a mais por requisição não valeria a pena."""
     if not token:
         return None
     return buscar_um(
         "SELECT s.id, s.usuario_id, s.dois_fatores_ok, "
         "       u.email, u.nome, u.totp_secret IS NOT NULL AS tem_segredo, "
-        "       u.totp_confirmado "
+        "       u.totp_confirmado, "
+        "       (SELECT a.versao FROM aceites a WHERE a.usuario_id = s.usuario_id "
+        "         ORDER BY a.id DESC LIMIT 1) AS aceite_versao "
         "  FROM sessoes s "
         "  JOIN usuarios u ON u.id = s.usuario_id "
         " WHERE s.token_hash = %s AND s.expira_em > NOW()",

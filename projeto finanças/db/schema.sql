@@ -231,6 +231,21 @@ CREATE TABLE IF NOT EXISTS regras_categoria (
     REFERENCES usuarios (id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- ── Aceites dos termos e da política de privacidade ─────────
+-- Uma linha por aceite, sem sobrescrever: é a prova do consentimento
+-- (LGPD, art. 8º, §2º). Vale a versão da linha mais recente; quando
+-- documentos.VERSAO sobe, a API pede o aceite de novo.
+CREATE TABLE IF NOT EXISTS aceites (
+  id          BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  usuario_id  INT UNSIGNED    NOT NULL,
+  versao      VARCHAR(20)     NOT NULL,
+  aceito_em   DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  KEY ix_aceites_usuario (usuario_id, id),
+  CONSTRAINT fk_aceites_usuario FOREIGN KEY (usuario_id)
+    REFERENCES usuarios (id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- ── Descartes da importação ─────────────────────────────────
 -- O que a importação do Open Finance deixou FORA da soma (pagamento de
 -- fatura, transferência entre as próprias contas), com o par que a regra

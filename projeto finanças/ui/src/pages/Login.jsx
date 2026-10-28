@@ -9,7 +9,7 @@
 import { ArrowLeft, Eye, EyeOff, KeyRound, Loader2, ShieldCheck, Wallet } from "lucide-react";
 import QRCode from "qrcode";
 import { useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { limparToken } from "../services/api";
 import {
   entrar,
@@ -301,6 +301,10 @@ export default function Login() {
               </form>
             </>
           )}
+
+          <p className="fin-login__legal">
+            <Link to="/termos">Termos de uso</Link> · <Link to="/privacidade">Privacidade</Link>
+          </p>
         </div>
       </main>
     </div>

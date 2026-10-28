@@ -20,6 +20,7 @@ from werkzeug.exceptions import HTTPException
 
 import config
 import cotacoes
+import documentos
 import gamificacao
 import ia
 import openfinance
@@ -79,11 +80,16 @@ def _token_do_header():
     return cabecalho[7:].strip() if cabecalho.startswith("Bearer ") else ""
 
 
-def exige_sessao(completa=True):
+def exige_sessao(completa=True, sem_aceite=False):
     """Protege a rota.
 
-    completa=True  → exige 2FA já validado (rotas de dado).
-    completa=False → aceita a sessão parcial (só as rotas de 2FA).
+    completa=True   → exige 2FA já validado (rotas de dado).
+    completa=False  → aceita a sessão parcial (só as rotas de 2FA).
+    sem_aceite=True → dispensa o aceite da versão atual dos termos. Só nas
+                      rotas que a tela de aceite usa e nas que exercem
+                      direito do titular (exportar, apagar a conta): quem
+                      não aceita os termos ainda pode levar ou apagar o
+                      que é dele.
     """
     def decorador(fn):
         @wraps(fn)
@@ -93,6 +99,8 @@ def exige_sessao(completa=True):
                 return erro("Sessão inválida ou expirada.", 401)
             if completa and not sessao["dois_fatores_ok"]:
                 return erro("Verificação em duas etapas pendente.", 403)
+            if completa and not sem_aceite and sessao["aceite_versao"] != documentos.VERSAO:
+                return erro("Aceite os termos de uso e a política de privacidade para continuar.", 428)
             g.sessao = sessao
             return fn(*a, **kw)
         return wrapper
@@ -185,18 +193,29 @@ def desativar_2fa():
 
 # ── Perfil ───────────────────────────────────────────────────
 @app.get("/api/perfil")
-@exige_sessao()
+@exige_sessao(sem_aceite=True)
 def ler_perfil():
+    """Também é como o front descobre que falta o aceite: `aceitePendente`
+    manda para a tela de aceite em vez de para o login."""
     s = g.sessao
     # A foto não vem no JOIN da sessão de propósito: ler_sessao roda em
     # toda requisição, e arrastar dezenas de KB de imagem junto seria
     # desperdício em cada chamada de dado.
     linha = buscar_um("SELECT foto FROM usuarios WHERE id = %s", (s["usuario_id"],))
+    aceite = buscar_um(
+        "SELECT versao, aceito_em FROM aceites WHERE usuario_id = %s ORDER BY id DESC LIMIT 1",
+        (s["usuario_id"],),
+    )
     return jsonify({
         "email": s["email"],
         "nome": s["nome"],
         "foto": (linha or {}).get("foto"),
         "twoFactorEnrolled": bool(s["totp_confirmado"]),
+        "aceite": {
+            "versao": aceite["versao"],
+            "em": aceite["aceito_em"].isoformat(timespec="minutes"),
+        } if aceite else None,
+        "aceitePendente": s["aceite_versao"] != documentos.VERSAO,
     })
 
 
@@ -265,6 +284,116 @@ def trocar_senha():
     # Trocou a senha: as outras sessões caem. Se a troca foi porque a
     # senha vazou, deixar sessão antiga viva anula o efeito.
     seguranca.encerrar_sessoes_do_usuario(g.sessao["usuario_id"], exceto_id=g.sessao["id"])
+    return jsonify({"ok": True})
+
+
+# ── LGPD: termos, aceite, exportar, apagar a conta ───────────
+@app.get("/api/documentos")
+def ler_documentos():
+    """Termos e política, sem sessão: o login também mostra os links."""
+    return jsonify(documentos.documentos())
+
+
+@app.post("/api/aceite")
+@exige_sessao(sem_aceite=True)
+def aceitar_documentos():
+    """Registra o aceite da versão que a pessoa leu. Se a versão mudou
+    entre abrir a tela e clicar, recusa: ela aceitaria um texto que não viu."""
+    versao = (request.get_json(silent=True) or {}).get("versao")
+    if versao != documentos.VERSAO:
+        return erro("Os documentos mudaram enquanto você lia. Recarregue a página.", 409)
+    with cursor(commit=True) as cur:
+        cur.execute(
+            "INSERT INTO aceites (usuario_id, versao) VALUES (%s, %s)",
+            (g.sessao["usuario_id"], versao),
+        )
+    return jsonify({"ok": True})
+
+
+def _exportavel(linha, sem=("usuario_id",)):
+    saida = {}
+    for chave, v in linha.items():
+        if chave in sem:
+            continue
+        if isinstance(v, (date, datetime)):
+            v = v.isoformat()
+        elif isinstance(v, Decimal):
+            v = float(v)
+        saida[chave] = v
+    return saida
+
+
+# Tudo o que tem usuario_id. SELECT * de propósito: coluna nova entra na
+# exportação sem ninguém lembrar de vir aqui.
+_TABELAS_DO_USUARIO = (
+    "transacoes", "orcamentos", "investimentos", "metas", "conexoes_bancarias",
+    "regras_categoria", "descartes", "aceites",
+)
+
+
+@app.get("/api/conta/exportar")
+@exige_sessao(sem_aceite=True)
+def exportar_conta():
+    """Tudo o que o app guarda sobre a pessoa, em JSON (LGPD, art. 18).
+
+    Ficam de fora só os segredos de segurança (resumo da senha, segredo do
+    TOTP, sessões): não são dado que se leve para outro lugar, e um arquivo
+    baixado com eles abriria a conta para quem o achasse.
+    """
+    uid = g.sessao["usuario_id"]
+    conta = buscar_um(
+        "SELECT email, nome, foto, totp_confirmado, criado_em, atualizado_em "
+        "FROM usuarios WHERE id = %s",
+        (uid,),
+    )
+    dados = {
+        "exportadoEm": datetime.now().isoformat(timespec="seconds"),
+        "sobre": "Exportação dos seus dados no app de finanças (LGPD, art. 18). "
+                 "Datas em ISO 8601 e valores em reais.",
+        "conta": _exportavel(conta),
+    }
+    for tabela in _TABELAS_DO_USUARIO:
+        dados[tabela] = [
+            _exportavel(l) for l in buscar_todos(
+                f"SELECT * FROM {tabela} WHERE usuario_id = %s", (uid,)
+            )
+        ]
+    dados["subtarefas"] = [
+        _exportavel(l) for l in buscar_todos(
+            "SELECT s.* FROM subtarefas s JOIN metas m ON m.id = s.meta_id "
+            "WHERE m.usuario_id = %s ORDER BY s.meta_id, s.ordem",
+            (uid,),
+        )
+    ]
+    return jsonify(dados)
+
+
+@app.delete("/api/conta")
+@exige_sessao(sem_aceite=True)
+def apagar_conta():
+    """Apaga a conta e tudo dela: as chaves estrangeiras levam o resto em
+    cascata, sessões inclusive.
+
+    Pede a senha, e o código quando o 2FA está ativo. Com uma sessão
+    esquecida aberta, dois cliques não podem apagar a vida financeira de
+    alguém. Erro conta tentativa, como no login.
+    """
+    d = request.get_json(silent=True) or {}
+    uid = g.sessao["usuario_id"]
+    usuario = buscar_um(
+        "SELECT senha_hash, totp_confirmado, bloqueado_ate FROM usuarios WHERE id = %s", (uid,)
+    )
+    if seguranca.esta_bloqueado(usuario):
+        return erro("Muitas tentativas. Tente de novo em alguns minutos.", 429)
+    if not seguranca.conferir_senha(d.get("senha") or "", usuario["senha_hash"]):
+        seguranca.registrar_falha(uid)
+        return erro("Senha incorreta.", 401)
+    if usuario["totp_confirmado"] and not seguranca.conferir_codigo(uid, d.get("codigo") or ""):
+        seguranca.registrar_falha(uid)
+        return erro("Código incorreto ou expirado.", 401)
+
+    with cursor(commit=True) as cur:
+        cur.execute("DELETE FROM usuarios WHERE id = %s", (uid,))
     return jsonify({"ok": True})
 
 

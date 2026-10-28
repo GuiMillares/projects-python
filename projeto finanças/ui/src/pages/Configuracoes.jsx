@@ -7,8 +7,10 @@
 import {
   Camera,
   Check,
+  Download,
   Eye,
   EyeOff,
+  FileText,
   KeyRound,
   Loader2,
   ShieldCheck,
@@ -21,6 +23,8 @@ import {
 } from "lucide-react";
 import QRCode from "qrcode";
 import { useEffect, useRef, useState } from "react";
+import { Link } from "react-router-dom";
+import ApagarConta from "../components/ApagarConta";
 import { usePerfil } from "../context/PerfilProvider";
 import { desativar2FA, iniciarSetup2FA, verificar2FA } from "../services/authService";
 import {
@@ -39,6 +43,7 @@ import {
 import { criarMapaDeCores } from "../services/cores";
 import { ImagemInvalida, prepararFotoPerfil } from "../services/imagem";
 import {
+  exportarDados,
   iniciais,
   removerFoto,
   salvarFoto,
@@ -86,6 +91,10 @@ export default function Configuracoes() {
   const [regras, setRegras] = useState([]);
   const [apagandoRegra, setApagandoRegra] = useState(null);
 
+  // Seus dados (LGPD)
+  const [exportando, setExportando] = useState(false);
+  const [apagandoConta, setApagandoConta] = useState(false);
+
   const avisar = (msg, tipo = "success") => {
     setToast({ msg, tipo });
     setTimeout(() => setToast(null), 3500);
@@ -124,6 +133,19 @@ export default function Configuracoes() {
       }
     })();
   }, []);
+
+  // ── Seus dados ────────────────────────────────────────────────────────────
+  const handleExportar = async () => {
+    setExportando(true);
+    try {
+      await exportarDados();
+      avisar("Arquivo com seus dados baixado.");
+    } catch (e) {
+      avisar(e.message, "error");
+    } finally {
+      setExportando(false);
+    }
+  };
 
   // ── Perfil ────────────────────────────────────────────────────────────────
   const handleNome = async (e) => {
@@ -309,7 +331,7 @@ export default function Configuracoes() {
       <div className="fin-page-head">
         <div>
           <h1 className="fin-page-title">Configurações</h1>
-          <p className="fin-page-sub">Perfil, segurança e orçamentos</p>
+          <p className="fin-page-sub">Perfil, segurança, orçamentos e seus dados</p>
         </div>
       </div>
 
@@ -654,6 +676,58 @@ export default function Configuracoes() {
           )}
         </section>
 
+        {/* ── LGPD: o que o app guarda e os direitos sobre isso ── */}
+        <section className="fin-card fin-cfg-largo">
+          <div className="fin-cfg-card__title">
+            <FileText size={15} /> Seus dados e privacidade
+          </div>
+          <p className="fin-field__hint" style={{ marginBottom: 12 }}>
+            {perfil?.aceite
+              ? `Você aceitou os termos de uso e a política de privacidade em ${new Date(
+                  perfil.aceite.em,
+                ).toLocaleDateString("pt-BR")}. `
+              : ""}
+            Leia de novo quando quiser: <Link to="/termos">Termos de uso</Link> ·{" "}
+            <Link to="/privacidade">Política de privacidade</Link>.
+          </p>
+
+          <div className="fin-cfg-dados">
+            <div>
+              <strong>Exportar meus dados</strong>
+              <span className="fin-field__hint">
+                Tudo o que o app guarda sobre você num arquivo JSON: perfil, lançamentos,
+                investimentos, metas, regras e conexões.
+              </span>
+            </div>
+            <button
+              type="button"
+              className="fin-btn fin-btn--outline fin-btn--sm"
+              onClick={handleExportar}
+              disabled={exportando}
+            >
+              {exportando ? <Loader2 size={13} className="fin-spin" /> : <Download size={13} />}{" "}
+              Exportar
+            </button>
+          </div>
+
+          <div className="fin-cfg-dados">
+            <div>
+              <strong>Apagar minha conta</strong>
+              <span className="fin-field__hint">
+                Apaga de vez a conta e tudo o que está nela.{" "}
+                {dosDoisFa ? "Pede sua senha e o código do autenticador." : "Pede sua senha."}
+              </span>
+            </div>
+            <button
+              type="button"
+              className="fin-btn fin-btn--danger fin-btn--sm"
+              onClick={() => setApagandoConta(true)}
+            >
+              <Trash2 size={13} /> Apagar conta
+            </button>
+          </div>
+        </section>
+
         {/* ── Regras de categoria ── */}
         <section className="fin-card fin-cfg-largo">
           <div className="fin-cfg-card__title">
@@ -692,6 +766,10 @@ export default function Configuracoes() {
           )}
         </section>
       </div>
+
+      {apagandoConta && (
+        <ApagarConta pedirCodigo={dosDoisFa} onCancelar={() => setApagandoConta(false)} />
+      )}
 
       {toast && (
         <div className={`fin-toast fin-toast--${toast.tipo}`} role="status">

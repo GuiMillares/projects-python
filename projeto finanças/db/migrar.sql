@@ -232,3 +232,16 @@ SET @sql := IF(@falta,
   'ALTER TABLE transacoes ADD COLUMN conferencia ENUM(''certo'',''errado'') NULL AFTER ignorada',
   'SELECT "transacoes.conferencia já existe" AS aviso');
 PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+-- 2026-10: LGPD. Cada aceite dos termos e da política vira uma linha, sem
+-- sobrescrever; vale a mais recente. Ver api/documentos.py.
+CREATE TABLE IF NOT EXISTS aceites (
+  id          BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  usuario_id  INT UNSIGNED    NOT NULL,
+  versao      VARCHAR(20)     NOT NULL,
+  aceito_em   DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  KEY ix_aceites_usuario (usuario_id, id),
+  CONSTRAINT fk_aceites_usuario FOREIGN KEY (usuario_id)
+    REFERENCES usuarios (id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
