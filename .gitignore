@@ -23,6 +23,10 @@ npm-debug.log*
 # estrutura é db/schema.sql.
 *.db
 *.sqlite3
+# Backups (ops/backup.py) já recusam pasta dentro do repositório; isto é
+# a segunda trava, caso alguém copie um para cá na mão.
+*.sql.gpg
+*.frase
 
 # ── Sistema e editor ────────────────────────────────────────
 .DS_Store

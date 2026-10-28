@@ -145,6 +145,10 @@ PRONTAS:
     Configurações (exportar e apagar a conta). Textos e VERSAO em
     api/documentos.py; rota de dado sem aceite da versão atual dá 428.
     Para mudar o texto de sentido, suba a VERSAO. Ver README, seção LGPD.
+  Fase 2 (ainda não no ar): ops/backup.py (fazer/testar/restaurar, gpg
+    AES-256, 30 dias, rclone), roteiro em ops/BACKUP.md e plano de
+    incidente em ops/INCIDENTES.md. Testado contra o MySQL local em
+    28/10/2026; o rclone ainda não.
 
 NÃO HÁ MAIS TELA PLACEHOLDER. O componente EmBreve.jsx foi removido.
 

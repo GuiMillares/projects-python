@@ -140,6 +140,14 @@ FIN_CONTROLADOR_CONTATO=um e-mail para assuntos de dados
 
 Sem as duas, a política diz "a pessoa que mantém esta instalação do app".
 
+Para a fase 2, na VPS:
+
+- [`ops/BACKUP.md`](ops/BACKUP.md): backup diário cifrado, 30 dias de
+  retenção, cópia externa e teste semanal de restauração, todos pelo
+  `ops/backup.py`.
+- [`ops/INCIDENTES.md`](ops/INCIDENTES.md): o que fazer, em ordem, se algum
+  dado vazar ou se perder.
+
 ## Design
 
 Paleta **Oliva & Terracota**: base neutra quente (marrom-tinta no escuro,
