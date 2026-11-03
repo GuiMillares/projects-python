@@ -140,6 +140,21 @@ FIN_CONTROLADOR_CONTATO=um e-mail para assuntos de dados
 
 Sem as duas, a política diz "a pessoa que mantém esta instalação do app".
 
+O Open Finance é **por pessoa**: o Meu Pluggy gratuito é intransferível, então
+cada um cadastra em Contas o Client ID e o Client Secret da própria aplicação
+na Pluggy. O segredo vai para o banco cifrado com uma chave que fica no `.env`:
+
+```
+FIN_CHAVE_CREDENCIAIS=   # gere com o comando abaixo
+```
+
+```bash
+python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+```
+
+Perdeu a chave? Ninguém perde dado; cada pessoa só cadastra a credencial de
+novo.
+
 Para a fase 2, na VPS:
 
 - [`ops/BACKUP.md`](ops/BACKUP.md): backup diário cifrado, 30 dias de

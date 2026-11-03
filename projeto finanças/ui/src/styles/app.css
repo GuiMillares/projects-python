@@ -1759,6 +1759,23 @@ textarea {
   max-width: 64ch;
 }
 
+/* Passo a passo da credencial da Pluggy: numerado, discreto, com os links
+   na cor do acento para se acharem no meio do texto. */
+.fin-of-passos {
+  margin: 8px 0 14px;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 12px;
+  color: var(--fin-muted);
+  max-width: 72ch;
+}
+
+.fin-of-passos a {
+  color: var(--fin-accent);
+}
+
 /* O caminho manual fica abaixo do botão principal, separado por um fio:
    é a alternativa, não a primeira coisa que se vê. */
 .fin-of-manual {

@@ -18,6 +18,7 @@ from functools import wraps
 from flask import Flask, g, jsonify, request
 from werkzeug.exceptions import HTTPException
 
+import cofre
 import config
 import cotacoes
 import documentos
@@ -365,6 +366,12 @@ def exportar_conta():
             (uid,),
         )
     ]
+    # credenciais_pluggy fica fora da lista de tabelas de propósito: o
+    # Client Secret é segredo como a senha. Só o Client ID vai.
+    credencial = buscar_um(
+        "SELECT client_id, atualizado_em FROM credenciais_pluggy WHERE usuario_id = %s", (uid,)
+    )
+    dados["credencialPluggy"] = _exportavel(credencial) if credencial else None
     return jsonify(dados)
 
 
@@ -392,8 +399,11 @@ def apagar_conta():
         seguranca.registrar_falha(uid)
         return erro("Código incorreto ou expirado.", 401)
 
+    cred, _ = _credencial(uid)
     with cursor(commit=True) as cur:
         cur.execute("DELETE FROM usuarios WHERE id = %s", (uid,))
+    if cred:
+        openfinance.esquecer_credencial(cred)
     return jsonify({"ok": True})
 
 
@@ -1011,6 +1021,45 @@ def _conexao_do_usuario(conexao_id, usuario_id):
     )
 
 
+_SEM_CHAVE = (
+    "O servidor está sem a chave que cifra as credenciais da Pluggy (FIN_CHAVE_CREDENCIAIS). "
+    "Fale com quem mantém o app."
+)
+
+
+def _credencial(usuario_id):
+    """A credencial da Pluggy DESTA pessoa, decifrada, e a situação dela.
+
+    @return (Credencial ou None, {"clientId", "situacao"}). situacao é "ok",
+            "ausente", "semChave" (o servidor não tem a chave) ou "ilegivel"
+            (a chave do servidor mudou e o segredo não abre mais).
+    """
+    linha = buscar_um(
+        "SELECT client_id, client_secret FROM credenciais_pluggy WHERE usuario_id = %s",
+        (usuario_id,),
+    )
+    if not cofre.disponivel():
+        return None, {"clientId": linha and linha["client_id"], "situacao": "semChave"}
+    if not linha:
+        return None, {"clientId": None, "situacao": "ausente"}
+    segredo = cofre.decifrar(linha["client_secret"])
+    if not segredo:
+        return None, {"clientId": linha["client_id"], "situacao": "ilegivel"}
+    return (
+        openfinance.Credencial(linha["client_id"], segredo),
+        {"clientId": linha["client_id"], "situacao": "ok"},
+    )
+
+
+def _aviso_credencial(info):
+    return {
+        "ok": None,
+        "semChave": _SEM_CHAVE,
+        "ilegivel": "Não consegui abrir a sua credencial da Pluggy: a chave do servidor mudou. "
+                    "Cadastre de novo.",
+    }.get(info["situacao"], openfinance.sem_credencial())
+
+
 @app.get("/api/openfinance")
 @exige_sessao()
 def ler_openfinance():
@@ -1020,10 +1069,11 @@ def ler_openfinance():
     e o próprio `aviso`, e a tela mostra o resto.
     """
     conexoes = _conexoes(g.sessao["usuario_id"])
+    cred, info = _credencial(g.sessao["usuario_id"])
 
     saida = []
     for c in conexoes:
-        dados, aviso = openfinance.panorama(c["item_id"])
+        dados, aviso = openfinance.panorama(cred, c["item_id"])
         saida.append({
             "id": c["id"],
             "itemId": c["item_id"],
@@ -1046,11 +1096,62 @@ def ler_openfinance():
         desde = hoje - timedelta(days=365)
 
     return jsonify({
-        "disponivel": openfinance.disponivel(),
-        "aviso": None if openfinance.disponivel() else openfinance.sem_credencial(),
+        "disponivel": cred is not None,
+        "aviso": _aviso_credencial(info),
+        # Só o Client ID: o segredo nunca volta numa resposta.
+        "credencial": info,
         "conexoes": saida,
         "importarDesde": desde.isoformat(),
     })
+
+
+@app.put("/api/openfinance/credencial")
+@exige_sessao()
+def salvar_credencial():
+    """Grava o Client ID e o Client Secret da aplicação da pessoa na Pluggy,
+    depois de testar o par lá. O segredo vai cifrado e não volta mais."""
+    if not cofre.disponivel():
+        return erro(_SEM_CHAVE, 503)
+    d = request.get_json(silent=True) or {}
+    client_id = str(d.get("clientId") or "").strip().lower()
+    segredo = str(d.get("clientSecret") or "").strip()
+    if not openfinance.ID_VALIDO.match(client_id):
+        return erro("O Client ID tem o formato 8-4-4-4-12, como aparece no painel da Pluggy.")
+    if not 8 <= len(segredo) <= 200:
+        return erro("Cole o Client Secret inteiro, como aparece no painel da Pluggy.")
+
+    nova = openfinance.Credencial(client_id, segredo)
+    # 422, e não 401: 401 é "sua sessão caiu" para o front.
+    aviso = openfinance.validar(nova)
+    if aviso:
+        return erro(aviso, 422)
+
+    uid = g.sessao["usuario_id"]
+    anterior, _ = _credencial(uid)
+    with cursor(commit=True) as cur:
+        cur.execute(
+            "INSERT INTO credenciais_pluggy (usuario_id, client_id, client_secret) "
+            "VALUES (%s, %s, %s) AS novo "
+            "ON DUPLICATE KEY UPDATE client_id = novo.client_id, client_secret = novo.client_secret",
+            (uid, client_id, cofre.cifrar(segredo)),
+        )
+    if anterior and anterior != nova:
+        openfinance.esquecer_credencial(anterior)
+    return jsonify({"ok": True, "clientId": client_id})
+
+
+@app.delete("/api/openfinance/credencial")
+@exige_sessao()
+def apagar_credencial():
+    """Tira a credencial do app. As conexões continuam gravadas, mas param de
+    ser lidas até entrar outra credencial; o consentimento segue no Meu Pluggy."""
+    uid = g.sessao["usuario_id"]
+    anterior, _ = _credencial(uid)
+    with cursor(commit=True) as cur:
+        cur.execute("DELETE FROM credenciais_pluggy WHERE usuario_id = %s", (uid,))
+    if anterior:
+        openfinance.esquecer_credencial(anterior)
+    return jsonify({"ok": True})
 
 
 @app.post("/api/openfinance/connect-token")
@@ -1066,7 +1167,8 @@ def token_do_widget():
             return erro("Conexão não encontrada.", 404)
         item_id = conexao["item_id"]
 
-    token, aviso = openfinance.token_do_widget(g.sessao["usuario_id"], item_id)
+    cred, _ = _credencial(g.sessao["usuario_id"])
+    token, aviso = openfinance.token_do_widget(cred, g.sessao["usuario_id"], item_id)
     if not token:
         return erro(aviso, 502)
     return jsonify({"accessToken": token})
@@ -1078,8 +1180,10 @@ def criar_conexao():
     item_id = str((request.get_json(silent=True) or {}).get("itemId") or "").strip().lower()
 
     # Confere na Pluggy antes de gravar: id digitado errado vira erro aqui,
-    # e não uma conexão quebrada para sempre na tela.
-    item, aviso = openfinance.conferir(item_id)
+    # e não uma conexão quebrada para sempre na tela. Com a credencial da
+    # própria pessoa, um item de outra aplicação nem chega a ser achado.
+    cred, _ = _credencial(g.sessao["usuario_id"])
+    item, aviso = openfinance.conferir(cred, item_id)
     if not item:
         return erro(aviso or "Conexão não encontrada.")
 
@@ -1107,7 +1211,9 @@ def apagar_conexao(conexao_id):
             "DELETE FROM conexoes_bancarias WHERE id = %s AND usuario_id = %s",
             (conexao_id, g.sessao["usuario_id"]),
         )
-    openfinance.esquecer(conexao["item_id"])
+    cred, _ = _credencial(g.sessao["usuario_id"])
+    if cred:
+        openfinance.esquecer(cred, conexao["item_id"])
     return jsonify({"ok": True})
 
 
@@ -1121,7 +1227,8 @@ def atualizar_conexao(conexao_id):
     if not conexao:
         return erro("Conexão não encontrada.", 404)
 
-    aviso = openfinance.atualizar(conexao["item_id"])
+    cred, _ = _credencial(g.sessao["usuario_id"])
+    aviso = openfinance.atualizar(cred, conexao["item_id"])
     if aviso:
         return erro(aviso, 502)
     return jsonify({"ok": True})
@@ -1149,8 +1256,9 @@ def importar_openfinance():
     if not conexoes:
         return erro("Nenhuma conexão cadastrada.")
 
+    cred, _ = _credencial(uid)
     lista, ignoradas, descartados, aviso = openfinance.transacoes(
-        [c["item_id"] for c in conexoes], desde
+        cred, [c["item_id"] for c in conexoes], desde
     )
     if aviso:
         return erro(aviso, 502)

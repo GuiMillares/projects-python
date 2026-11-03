@@ -112,12 +112,13 @@ IA_MAX_SUBTAREFAS = int(os.getenv("FIN_IA_MAX_SUBTAREFAS", "8"))
 IA_THINKING = os.getenv("FIN_IA_THINKING", "MEDIUM")
 
 # ── Open Finance (Pluggy, via Meu Pluggy) ────────────────────
-# As credenciais vêm do painel de desenvolvedor da Pluggy e moram só no
-# ambiente, igual ao token da brapi. Sem elas a tela de Contas abre e
-# explica o que falta.
+# Não há credencial do app inteiro: o Meu Pluggy gratuito é intransferível,
+# então cada pessoa cadastra em Contas o Client ID e o Client Secret da
+# própria aplicação na Pluggy. O segredo vai para o banco cifrado com
+# CHAVE_CREDENCIAIS (ver cofre.py). Gere uma com:
+#   python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
 PLUGGY_BASE = os.getenv("FIN_PLUGGY_BASE", "https://api.pluggy.ai")
-PLUGGY_CLIENT_ID = os.getenv("FIN_PLUGGY_CLIENT_ID", "").strip()
-PLUGGY_CLIENT_SECRET = os.getenv("FIN_PLUGGY_CLIENT_SECRET", "").strip()
+CHAVE_CREDENCIAIS = os.getenv("FIN_CHAVE_CREDENCIAIS", "").strip()
 
 PLUGGY_TIMEOUT = int(os.getenv("FIN_PLUGGY_TIMEOUT", "20"))
 

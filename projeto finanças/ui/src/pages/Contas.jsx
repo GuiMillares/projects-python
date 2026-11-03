@@ -15,6 +15,7 @@ import {
   CloudOff,
   CreditCard,
   Download,
+  KeyRound,
   Landmark,
   Link2,
   Loader2,
@@ -37,7 +38,9 @@ import {
   haQuanto,
   importarTransacoes,
   lerOpenFinance,
+  removerCredencial,
   resumoOpenFinance,
+  salvarCredencial,
   sincronizar,
   tokenDoWidget,
 } from "../services/openfinanceService";
@@ -238,6 +241,17 @@ export default function Contas() {
   }
 
   const disponivel = resposta?.disponivel;
+  const credencial = resposta?.credencial;
+  // Sem chave no servidor, a pessoa não tem o que cadastrar: só o aviso.
+  const mostrarCredencial = credencial && credencial.situacao !== "semChave";
+  const credencialPronta = credencial?.situacao === "ok";
+  const cartaoCredencial = mostrarCredencial && (
+    <CredencialPluggy
+      credencial={credencial}
+      notificar={notificar}
+      onMudou={() => carregar({ silencioso: true })}
+    />
+  );
 
   return (
     <>
@@ -293,7 +307,9 @@ export default function Contas() {
         </div>
       )}
 
-      {!disponivel && (
+      {/* Credencial ausente não vira banner: o próprio cartão de cadastro,
+          logo abaixo, explica o que falta. */}
+      {!disponivel && credencial?.situacao !== "ausente" && (
         <div className="fin-banner" style={{ "--bc": "var(--fin-warn)" }}>
           <CloudOff size={16} />
           <span>{resposta?.aviso}</span>
@@ -379,6 +395,10 @@ export default function Contas() {
 
       {/* ── Conexões ── */}
       <div className="fin-of-lista">
+        {/* Sem credencial, cadastrar é o primeiro passo; com ela, o cartão
+            desce para o fim e vira só "trocar / remover". */}
+        {!credencialPronta && cartaoCredencial}
+
         {conexoes.map((c) => (
           <Conexao
             key={c.id}
@@ -447,6 +467,8 @@ export default function Contas() {
             </div>
           </form>
         </div>
+
+        {credencialPronta && cartaoCredencial}
       </div>
 
       {/* Sem includeSandbox: os bancos de teste da Pluggy só confundiriam
@@ -513,6 +535,183 @@ function ResultadoImportacao({ r, onConferir }) {
         <button className="fin-btn fin-btn--ghost fin-btn--sm" onClick={onConferir}>
           <SearchCheck size={13} /> Conferir
         </button>
+      )}
+    </div>
+  );
+}
+
+// Cada pessoa lê os próprios bancos com a própria aplicação na Pluggy: é a
+// regra do Meu Pluggy gratuito, que é intransferível. Este cartão é onde a
+// credencial entra (e sai). O segredo vai para a API, que testa na Pluggy,
+// cifra e nunca devolve.
+function CredencialPluggy({ credencial, notificar, onMudou }) {
+  const pronta = credencial.situacao === "ok";
+  const [editando, setEditando] = useState(!pronta);
+  const [clientId, setClientId] = useState("");
+  const [segredo, setSegredo] = useState("");
+  const [salvando, setSalvando] = useState(false);
+  const [paraRemover, setParaRemover] = useState(false);
+  const [removendo, setRemovendo] = useState(false);
+
+  const salvar = async (e) => {
+    e.preventDefault();
+    setSalvando(true);
+    try {
+      await salvarCredencial(clientId.trim(), segredo.trim());
+      setSegredo("");
+      setClientId("");
+      setEditando(false);
+      notificar("Credencial da Pluggy conferida e salva.");
+      await onMudou();
+    } catch (err) {
+      notificar(err.message, "error");
+    } finally {
+      setSalvando(false);
+    }
+  };
+
+  const remover = async () => {
+    setRemovendo(true);
+    try {
+      await removerCredencial();
+      setParaRemover(false);
+      setEditando(true);
+      notificar("Credencial removida.");
+      await onMudou();
+    } catch (err) {
+      notificar(err.message, "error");
+    } finally {
+      setRemovendo(false);
+    }
+  };
+
+  const id = credencial.clientId || "";
+
+  return (
+    <div className="fin-card">
+      <div className="fin-cfg-card__title">
+        <KeyRound size={15} /> Sua aplicação na Pluggy
+      </div>
+
+      {pronta && !editando ? (
+        <>
+          <p className="fin-of-nota" style={{ marginTop: 0, marginBottom: 12 }}>
+            Client ID {id.slice(0, 8)}…{id.slice(-4)}. O Client Secret fica cifrado no servidor e
+            não aparece de novo.
+          </p>
+          <div className="fin-form__actions">
+            <button
+              className="fin-btn fin-btn--ghost fin-btn--sm"
+              onClick={() => setEditando(true)}
+            >
+              <RefreshCw size={13} /> Trocar
+            </button>
+            <button
+              className="fin-btn fin-btn--danger fin-btn--sm"
+              onClick={() => setParaRemover(true)}
+            >
+              <Trash2 size={13} /> Remover
+            </button>
+          </div>
+        </>
+      ) : (
+        <>
+          <p className="fin-of-nota" style={{ marginTop: 0 }}>
+            O plano gratuito da Pluggy é pessoal: cada pessoa lê os próprios bancos com a própria
+            aplicação. Faça uma vez:
+          </p>
+          <ol className="fin-of-passos">
+            <li>
+              Crie sua conta no{" "}
+              <a href="https://meu.pluggy.ai/" target="_blank" rel="noreferrer">
+                Meu Pluggy
+              </a>{" "}
+              e conecte seus bancos (até 5 contas).
+            </li>
+            <li>
+              Crie uma conta na{" "}
+              <a href="https://dashboard.pluggy.ai/" target="_blank" rel="noreferrer">
+                dashboard da Pluggy
+              </a>
+              , crie uma aplicação de desenvolvimento e inclua nela o conector MeuPluggy (
+              <a href="https://github.com/pluggyai/meu-pluggy" target="_blank" rel="noreferrer">
+                guia da Pluggy
+              </a>
+              ).
+            </li>
+            <li>Copie o Client ID e o Client Secret da aplicação e cole aqui.</li>
+            <li>Depois, use Conectar banco e escolha Meu Pluggy.</li>
+          </ol>
+          {credencial.situacao === "ilegivel" && (
+            <p className="fin-of-nota" style={{ marginTop: 0, marginBottom: 12 }}>
+              A credencial guardada não abre mais (a chave do servidor mudou). Cadastre de novo.
+            </p>
+          )}
+          <form className="fin-form" onSubmit={salvar}>
+            <div className="fin-form__row">
+              <div className="fin-field">
+                <label htmlFor="pl-id">Client ID</label>
+                <input
+                  id="pl-id"
+                  value={clientId}
+                  onChange={(e) => setClientId(e.target.value.trim())}
+                  placeholder="00000000-0000-0000-0000-000000000000"
+                  spellCheck={false}
+                  autoComplete="off"
+                  required
+                />
+              </div>
+              <div className="fin-field">
+                <label htmlFor="pl-segredo">Client Secret</label>
+                <input
+                  id="pl-segredo"
+                  type="password"
+                  value={segredo}
+                  onChange={(e) => setSegredo(e.target.value)}
+                  spellCheck={false}
+                  autoComplete="off"
+                  required
+                />
+              </div>
+            </div>
+            <div className="fin-form__actions">
+              <button
+                className="fin-btn fin-btn--primary fin-btn--sm"
+                disabled={salvando || !clientId || !segredo}
+              >
+                {salvando ? (
+                  <>
+                    <Loader2 size={13} className="fin-spin" /> Conferindo na Pluggy...
+                  </>
+                ) : (
+                  <>
+                    <Check size={13} /> Salvar
+                  </>
+                )}
+              </button>
+              {pronta && (
+                <button
+                  type="button"
+                  className="fin-btn fin-btn--ghost fin-btn--sm"
+                  onClick={() => setEditando(false)}
+                >
+                  Cancelar
+                </button>
+              )}
+            </div>
+          </form>
+        </>
+      )}
+
+      {paraRemover && (
+        <ConfirmarExclusao
+          titulo="Remover a credencial da Pluggy?"
+          mensagem="As conexões continuam aqui, mas o app para de ler seus bancos até você cadastrar outra credencial. O consentimento no Meu Pluggy não muda."
+          rotuloConfirmar="Remover"
+          ocupado={removendo}
+          onConfirmar={remover}
+          onCancelar={() => setParaRemover(false)}
+        />
       )}
     </div>
   );

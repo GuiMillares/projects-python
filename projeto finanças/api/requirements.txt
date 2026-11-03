@@ -1,9 +1,14 @@
-# Tudo pure-Python: instala sem compilador no Windows/Python 3.14.
-# O hash de senha usa hashlib.scrypt, que já vem na biblioteca padrão:
-# uma dependência a menos e nada de bcrypt com build quebrado.
+# Instala sem compilador no Windows/Python 3.14: tudo pure-Python ou com
+# wheel pronta. O hash de senha usa hashlib.scrypt, que já vem na
+# biblioteca padrão: uma dependência a menos e nada de bcrypt com build
+# quebrado.
 Flask==3.1.0
 PyMySQL==1.1.1
 pyotp==2.9.0
+
+# Cifra do Client Secret da Pluggy de cada pessoa (api/cofre.py). Já vinha
+# como dependência do google-genai; aqui fica explícita e com versão.
+cryptography==50.0.0
 
 # SDK oficial do Google Gemini, usado só em api/ia.py para quebrar metas
 # em subtarefas. A chave vem da variável de ambiente GEMINI_API_KEY.

@@ -245,3 +245,18 @@ CREATE TABLE IF NOT EXISTS aceites (
   CONSTRAINT fk_aceites_usuario FOREIGN KEY (usuario_id)
     REFERENCES usuarios (id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 2026-11: credencial da Pluggy por pessoa. O Meu Pluggy gratuito é
+-- intransferível, então cada um usa a própria aplicação; o Client Secret
+-- fica cifrado (api/cofre.py). As FIN_PLUGGY_CLIENT_* do .env deixam de
+-- ser usadas: cadastre a sua em Contas.
+CREATE TABLE IF NOT EXISTS credenciais_pluggy (
+  usuario_id     INT UNSIGNED  NOT NULL,
+  client_id      CHAR(36)      NOT NULL,
+  client_secret  VARCHAR(512)  NOT NULL,
+  atualizado_em  DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP
+                               ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (usuario_id),
+  CONSTRAINT fk_credenciais_usuario FOREIGN KEY (usuario_id)
+    REFERENCES usuarios (id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

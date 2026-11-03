@@ -215,6 +215,22 @@ CREATE TABLE IF NOT EXISTS conexoes_bancarias (
     REFERENCES usuarios (id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- ── Credencial da Pluggy de cada pessoa ─────────────────────
+-- O Meu Pluggy gratuito é intransferível: cada pessoa lê os próprios bancos
+-- com a própria aplicação na Pluggy. Uma linha por pessoa. O Client Secret
+-- fica cifrado (api/cofre.py, chave FIN_CHAVE_CREDENCIAIS no .env, fora
+-- deste banco); o Client ID não é segredo.
+CREATE TABLE IF NOT EXISTS credenciais_pluggy (
+  usuario_id     INT UNSIGNED  NOT NULL,
+  client_id      CHAR(36)      NOT NULL,
+  client_secret  VARCHAR(512)  NOT NULL,
+  atualizado_em  DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP
+                               ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (usuario_id),
+  CONSTRAINT fk_credenciais_usuario FOREIGN KEY (usuario_id)
+    REFERENCES usuarios (id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- ── Regras de categoria ─────────────────────────────────────
 -- "Descrição contém X vira categoria Y", aplicada a cada importação e,
 -- ao ser criada, às importadas que já existem. `padrao` fica normalizado

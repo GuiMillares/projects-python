@@ -6,6 +6,9 @@ contas são conectadas no Meu Pluggy (meu.pluggy.ai), com o consentimento
 dado no app de cada banco, e aqui só chegam os ids dessas conexões
 ("items", no vocabulário da Pluggy).
 
+Cada pessoa usa a PRÓPRIA aplicação na Pluggy (ver Credencial): o Meu
+Pluggy gratuito é intransferível, então não há credencial do app inteiro.
+
 Só a biblioteca padrão, como em cotacoes.py.
 
 REGRA DESTE MÓDULO: igual a cotacoes.py e ia.py, ele nunca levanta exceção
@@ -29,6 +32,7 @@ import urllib.parse
 import urllib.request
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
+from typing import NamedTuple
 
 import config
 
@@ -40,20 +44,29 @@ _BRT = timezone(timedelta(hours=-3))
 # caminho da URL: deixar passar barra viraria injeção de caminho.
 ID_VALIDO = re.compile(r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
 
-_chave = {"valor": None, "expira": 0.0}
+class Credencial(NamedTuple):
+    """Client ID e Client Secret da aplicação de UMA pessoa na Pluggy.
 
-# item_id -> (momento_em_que_expira, dados)
-_cache: dict[str, tuple[float, dict]] = {}
+    O Meu Pluggy gratuito é intransferível: cada pessoa lê os próprios dados
+    com a própria aplicação. Por isso não existe credencial global, e toda
+    função pública recebe a de quem está pedindo (app.py tira do banco).
+    """
+    client_id: str
+    client_secret: str
+
+
+# client_id -> (apiKey, momento_em_que_expira)
+_chaves: dict[str, tuple[str, float]] = {}
+
+# (client_id, item_id) -> (momento_em_que_expira, dados). O client_id na
+# chave impede que um item lido por uma pessoa saia do cache para outra.
+_cache: dict[tuple[str, str], tuple[float, dict]] = {}
 
 
 class _FalhaPluggy(Exception):
     def __init__(self, mensagem, status=None):
         super().__init__(mensagem)
         self.status = status
-
-
-def disponivel() -> bool:
-    return bool(config.PLUGGY_CLIENT_ID and config.PLUGGY_CLIENT_SECRET)
 
 
 # ── HTTP ─────────────────────────────────────────────────────
@@ -65,10 +78,7 @@ def _mensagem_http(e: urllib.error.HTTPError) -> str:
         pass
 
     if e.code == 401:
-        base = (
-            "A Pluggy recusou as credenciais. Confira FIN_PLUGGY_CLIENT_ID e "
-            "FIN_PLUGGY_CLIENT_SECRET."
-        )
+        base = "A Pluggy recusou as credenciais. Confira o Client ID e o Client Secret em Contas."
     elif e.code == 404:
         base = "A Pluggy não encontrou essa conexão. Confira o id no painel da Pluggy."
     elif e.code == 429:
@@ -78,7 +88,8 @@ def _mensagem_http(e: urllib.error.HTTPError) -> str:
     return f"{base} ({detalhe})" if detalhe else base
 
 
-def _requisitar(metodo, caminho, params=None, corpo=None, autenticar=True):
+def _requisitar(metodo, caminho, params=None, corpo=None, cred=None):
+    """Sem `cred`, o request vai sem chave (só o /auth)."""
     url = config.PLUGGY_BASE + caminho
     if params:
         url += "?" + urllib.parse.urlencode(params)
@@ -88,8 +99,8 @@ def _requisitar(metodo, caminho, params=None, corpo=None, autenticar=True):
     if corpo is not None:
         dados = json.dumps(corpo).encode("utf-8")
         headers["Content-Type"] = "application/json"
-    if autenticar:
-        headers["X-API-KEY"] = _api_key()
+    if cred:
+        headers["X-API-KEY"] = _api_key(cred)
 
     req = urllib.request.Request(url, data=dados, headers=headers, method=metodo)
     try:
@@ -104,49 +115,46 @@ def _requisitar(metodo, caminho, params=None, corpo=None, autenticar=True):
     return json.loads(bruto, parse_float=Decimal) if bruto else {}
 
 
-def _api_key() -> str:
-    if _chave["valor"] and time.time() < _chave["expira"]:
-        return _chave["valor"]
+def _api_key(cred: Credencial) -> str:
+    achada = _chaves.get(cred.client_id)
+    if achada and time.time() < achada[1]:
+        return achada[0]
 
     r = _requisitar(
-        "POST", "/auth",
-        corpo={"clientId": config.PLUGGY_CLIENT_ID, "clientSecret": config.PLUGGY_CLIENT_SECRET},
-        autenticar=False,
+        "POST", "/auth", corpo={"clientId": cred.client_id, "clientSecret": cred.client_secret}
     )
     if not r.get("apiKey"):
         raise _FalhaPluggy("A Pluggy não devolveu a chave de acesso.")
 
     # A chave vale 2 horas. Renovar com folga evita uma consulta cair no
     # meio por expirar entre um request e outro.
-    _chave["valor"] = r["apiKey"]
-    _chave["expira"] = time.time() + 100 * 60
-    return _chave["valor"]
+    _chaves[cred.client_id] = (r["apiKey"], time.time() + 100 * 60)
+    return r["apiKey"]
 
 
-def _chamar(metodo, caminho, params=None, corpo=None):
+def _chamar(cred, metodo, caminho, params=None, corpo=None):
     """Um request autenticado. Se a chave tiver vencido do lado de lá antes
     do nosso relógio, pede outra e tenta uma única vez de novo."""
     try:
-        return _requisitar(metodo, caminho, params, corpo)
+        return _requisitar(metodo, caminho, params, corpo, cred)
     except _FalhaPluggy as e:
-        if e.status not in (401, 403) or not _chave["valor"]:
+        if e.status not in (401, 403) or not _chaves.pop(cred.client_id, None):
             raise
-        _chave["valor"] = None
-        return _requisitar(metodo, caminho, params, corpo)
+        return _requisitar(metodo, caminho, params, corpo, cred)
 
 
-def _todas(caminho, params):
+def _todas(cred, caminho, params):
     """Junta as páginas de uma listagem até o teto de PLUGGY_MAX_PAGINAS."""
     itens, pagina = [], 1
     while True:
-        r = _chamar("GET", caminho, {**params, "page": pagina})
+        r = _chamar(cred, "GET", caminho, {**params, "page": pagina})
         itens += r.get("results") or []
         if pagina >= int(r.get("totalPages") or 1) or pagina >= config.PLUGGY_MAX_PAGINAS:
             return itens
         pagina += 1
 
 
-def _transacoes_da_conta(conta_id, desde, ate=None):
+def _transacoes_da_conta(cred, conta_id, desde, ate=None):
     """GET /v2/transactions, paginado por cursor. O /transactions antigo
     responde 410. O `next` vem como query string pronta; daqui só se tira o
     `after` dela, com o mesmo teto de PLUGGY_MAX_PAGINAS."""
@@ -156,7 +164,7 @@ def _transacoes_da_conta(conta_id, desde, ate=None):
 
     itens = []
     for _ in range(config.PLUGGY_MAX_PAGINAS):
-        r = _chamar("GET", "/v2/transactions", params)
+        r = _chamar(cred, "GET", "/v2/transactions", params)
         itens += r.get("results") or []
         cursor = urllib.parse.parse_qs(str(r.get("next") or "").lstrip("?")).get("after")
         if not cursor:
@@ -209,19 +217,19 @@ def normalizar(texto) -> str:
 
 
 # ── Cache ────────────────────────────────────────────────────
-def _do_cache(item_id):
-    achado = _cache.get(item_id)
+def _do_cache(cred, item_id):
+    achado = _cache.get((cred.client_id, item_id))
     if not achado:
         return None
     expira, dados = achado
     if time.time() > expira:
-        _cache.pop(item_id, None)
+        _cache.pop((cred.client_id, item_id), None)
         return None
     return dados
 
 
-def _guardar(item_id, dados):
-    _cache[item_id] = (time.time() + config.PLUGGY_CACHE_SEGUNDOS, dados)
+def _guardar(cred, item_id, dados):
+    _cache[(cred.client_id, item_id)] = (time.time() + config.PLUGGY_CACHE_SEGUNDOS, dados)
 
 
 # ── Tradução do payload ──────────────────────────────────────
@@ -316,18 +324,18 @@ def _valor(t) -> Decimal:
     return abs(Decimal(str(v)))
 
 
-def _cartao(c):
+def _cartao(cred, c):
     cd = c.get("creditData") or {}
     fechamento = _data(cd.get("balanceCloseDate"))
     vencimento = _data(cd.get("balanceDueDate"))
 
     faturas = sorted(
-        _todas("/bills", {"accountId": c["id"]}),
+        _todas(cred, "/bills", {"accountId": c["id"]}),
         key=lambda f: f.get("dueDate") or "",
         reverse=True,
     )
     desde = date.today() - timedelta(days=config.PLUGGY_DIAS_PARCELAS)
-    recentes = _transacoes_da_conta(c["id"], desde)
+    recentes = _transacoes_da_conta(cred, c["id"], desde)
 
     limite = cd.get("creditLimit")
     livre = cd.get("availableCreditLimit")
@@ -442,45 +450,62 @@ def _projetar_parcelas(transacoes, faturas, fechamento, vencimento):
 # ── Funções públicas ─────────────────────────────────────────
 def sem_credencial():
     return (
-        "Open Finance não configurado. Defina FIN_PLUGGY_CLIENT_ID e "
-        "FIN_PLUGGY_CLIENT_SECRET com as credenciais do painel da Pluggy."
+        "Cadastre o Client ID e o Client Secret da sua aplicação na Pluggy, aqui em Contas, "
+        "para ler seus bancos."
     )
 
 
-def conferir(item_id) -> tuple[dict | None, str | None]:
+def validar(cred) -> str | None:
+    """Testa um par de credenciais antes de gravar. Pede uma chave nova de
+    propósito, sem olhar o cache: o que está em jogo é se ESTE par funciona."""
+    try:
+        r = _requisitar(
+            "POST", "/auth", corpo={"clientId": cred.client_id, "clientSecret": cred.client_secret}
+        )
+    except _FalhaPluggy as e:
+        return str(e)
+    except Exception:  # noqa: BLE001
+        return "Não consegui falar com a Pluggy agora."
+    if not r.get("apiKey"):
+        return "A Pluggy não devolveu a chave de acesso."
+    _chaves[cred.client_id] = (r["apiKey"], time.time() + 100 * 60)
+    return None
+
+
+def conferir(cred, item_id) -> tuple[dict | None, str | None]:
     """Confere se o id existe na Pluggy antes de gravar a conexão."""
-    if not disponivel():
+    if not cred:
         return None, sem_credencial()
     if not ID_VALIDO.match(str(item_id or "")):
         return None, "Esse id não tem o formato de uma conexão da Pluggy."
     try:
-        return _item(_chamar("GET", f"/items/{item_id}")), None
+        return _item(_chamar(cred, "GET", f"/items/{item_id}")), None
     except _FalhaPluggy as e:
         return None, str(e)
     except Exception:  # noqa: BLE001 - de propósito: nada sai daqui
         return None, "Não consegui consultar a Pluggy agora."
 
 
-def panorama(item_id) -> tuple[dict | None, str | None]:
+def panorama(cred, item_id) -> tuple[dict | None, str | None]:
     """Instituição, contas com saldo, cartões com faturas e investimentos
     de uma conexão."""
-    if not disponivel():
+    if not cred:
         return None, sem_credencial()
     if not ID_VALIDO.match(str(item_id or "")):
         return None, "Id de conexão inválido."
 
-    em_cache = _do_cache(item_id)
+    em_cache = _do_cache(cred, item_id)
     if em_cache:
         return em_cache, None
 
     try:
-        item = _item(_chamar("GET", f"/items/{item_id}"))
-        contas = _todas("/accounts", {"itemId": item_id})
-        investimentos = _todas("/investments", {"itemId": item_id})
+        item = _item(_chamar(cred, "GET", f"/items/{item_id}"))
+        contas = _todas(cred, "/accounts", {"itemId": item_id})
+        investimentos = _todas(cred, "/investments", {"itemId": item_id})
         dados = {
             **item,
             "contas": [_conta(c) for c in contas if c.get("type") != "CREDIT"],
-            "cartoes": [_cartao(c) for c in contas if c.get("type") == "CREDIT"],
+            "cartoes": [_cartao(cred, c) for c in contas if c.get("type") == "CREDIT"],
             "investimentos": [_investimento(i) for i in investimentos if _investimento_ativo(i)],
         }
     except _FalhaPluggy as e:
@@ -491,19 +516,19 @@ def panorama(item_id) -> tuple[dict | None, str | None]:
     # Durante a sincronização os números estão mudando: guardar em cache
     # faria a tela mostrar o meio do caminho por um minuto inteiro.
     if item["status"] != "UPDATING":
-        _guardar(item_id, dados)
+        _guardar(cred, item_id, dados)
     return dados, None
 
 
-def atualizar(item_id) -> str | None:
+def atualizar(cred, item_id) -> str | None:
     """Pede à Pluggy que busque os dados no banco agora. Devolve o aviso."""
-    if not disponivel():
+    if not cred:
         return sem_credencial()
     if not ID_VALIDO.match(str(item_id or "")):
         return "Id de conexão inválido."
-    _cache.pop(item_id, None)
+    esquecer(cred, item_id)
     try:
-        _chamar("PATCH", f"/items/{item_id}", corpo={})
+        _chamar(cred, "PATCH", f"/items/{item_id}", corpo={})
         return None
     except _FalhaPluggy as e:
         return str(e)
@@ -511,7 +536,7 @@ def atualizar(item_id) -> str | None:
         return "Não consegui pedir a atualização agora."
 
 
-def token_do_widget(usuario_id, item_id=None) -> tuple[str | None, str | None]:
+def token_do_widget(cred, usuario_id, item_id=None) -> tuple[str | None, str | None]:
     """Token curto para o widget Pluggy Connect abrir no navegador.
 
     É o único segredo que vai para o front, e de propósito: ele só serve
@@ -519,7 +544,7 @@ def token_do_widget(usuario_id, item_id=None) -> tuple[str | None, str | None]:
     continua só aqui. Com `item_id`, o widget abre no modo de reconectar
     aquela conexão em vez de criar outra.
     """
-    if not disponivel():
+    if not cred:
         return None, sem_credencial()
     corpo = {"options": {"clientUserId": str(usuario_id)}}
     if item_id:
@@ -527,7 +552,7 @@ def token_do_widget(usuario_id, item_id=None) -> tuple[str | None, str | None]:
             return None, "Id de conexão inválido."
         corpo["itemId"] = item_id
     try:
-        r = _chamar("POST", "/connect_token", corpo=corpo)
+        r = _chamar(cred, "POST", "/connect_token", corpo=corpo)
     except _FalhaPluggy as e:
         return None, str(e)
     except Exception:  # noqa: BLE001
@@ -537,8 +562,15 @@ def token_do_widget(usuario_id, item_id=None) -> tuple[str | None, str | None]:
     return r["accessToken"], None
 
 
-def esquecer(item_id):
-    _cache.pop(item_id, None)
+def esquecer(cred, item_id):
+    _cache.pop((cred.client_id, item_id), None)
+
+
+def esquecer_credencial(cred):
+    """Credencial trocada ou removida: some a chave e tudo o que foi lido com ela."""
+    _chaves.pop(cred.client_id, None)
+    for chave in [k for k in _cache if k[0] == cred.client_id]:
+        _cache.pop(chave, None)
 
 
 # Categorias da Pluggy (vêm em inglês) para o vocabulário do app. O que não
@@ -740,7 +772,7 @@ def _lancamento(t, credito):
     }
 
 
-def transacoes(item_ids, desde: date) -> tuple[list[dict], dict, list[dict], str | None]:
+def transacoes(cred, item_ids, desde: date) -> tuple[list[dict], dict, list[dict], str | None]:
     """Lançamentos das conexões, prontos para a tabela `transacoes`.
 
     @return (lançamentos, contagem do que foi deixado de fora por motivo,
@@ -754,17 +786,19 @@ def transacoes(item_ids, desde: date) -> tuple[list[dict], dict, list[dict], str
              importar metade sem avisar.
     """
     ignorados = {"pendentes": 0, "pagamentoFatura": 0, "transferencias": 0, "semValor": 0}
-    if not disponivel():
+    if not cred:
         return [], ignorados, [], sem_credencial()
 
     try:
-        contas = [c for i in item_ids for c in _todas("/accounts", {"itemId": i})]
+        contas = [c for i in item_ids for c in _todas(cred, "/accounts", {"itemId": i})]
         tem_cartao = any(c.get("type") == "CREDIT" for c in contas)
 
         brutas = []
         for c in contas:
             credito = c.get("type") == "CREDIT"
-            brutas += [(c, credito, t) for t in _transacoes_da_conta(c["id"], desde, date.today())]
+            brutas += [
+                (c, credito, t) for t in _transacoes_da_conta(cred, c["id"], desde, date.today())
+            ]
 
         motivos = [_motivo_para_ignorar(t, credito, tem_cartao) for _, credito, t in brutas]
         pares = _descartar_pares(brutas, motivos)

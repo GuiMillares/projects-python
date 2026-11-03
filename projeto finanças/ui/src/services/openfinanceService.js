@@ -14,6 +14,15 @@ export const tokenDoWidget = (conexaoId) =>
 
 export const conectar = (itemId) => api.post("/api/openfinance/conexoes", { itemId });
 
+/**
+ * Credencial da aplicação DA PESSOA na Pluggy (o plano gratuito é
+ * intransferível). A API testa o par antes de gravar; o segredo não volta.
+ */
+export const salvarCredencial = (clientId, clientSecret) =>
+  api.put("/api/openfinance/credencial", { clientId, clientSecret });
+
+export const removerCredencial = () => api.del("/api/openfinance/credencial");
+
 export const desconectar = (id) => api.del(`/api/openfinance/conexoes/${id}`);
 
 /** Pede para a Pluggy buscar no banco agora. Volta antes de terminar. */

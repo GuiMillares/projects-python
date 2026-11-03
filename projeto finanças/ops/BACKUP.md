@@ -7,10 +7,11 @@ semana. Tudo pelo `ops/backup.py`.
 ## O que entra e o que fica de fora
 
 - **Entra:** o banco `local_finance` inteiro, com todas as tabelas.
-- **Fica de fora:** o `.env` (chaves da Pluggy, do Gemini e da brapi, senha do
-  banco) e a frase da cifra. Os dois vão para o gerenciador de senhas. Sem a
-  frase, nenhum backup abre. Sem o `.env`, o app sobe mas não fala com a
-  Pluggy nem com o Gemini.
+- **Fica de fora:** o `.env` (chave do Gemini, token da brapi, senha do banco
+  e `FIN_CHAVE_CREDENCIAIS`, que abre as credenciais da Pluggy de cada pessoa)
+  e a frase da cifra. Os dois vão para o gerenciador de senhas. Sem a frase,
+  nenhum backup abre. Sem a `FIN_CHAVE_CREDENCIAIS`, o banco restaurado volta
+  inteiro, mas cada pessoa precisa cadastrar de novo a credencial da Pluggy.
 - **O código** está no GitHub.
 
 O SQL decifrado nunca toca o disco: o dump entra no `gpg` por pipe, e a

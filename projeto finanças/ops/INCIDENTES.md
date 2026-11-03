@@ -7,8 +7,9 @@ perdido. Cabe numa página para ser lido com pressa.
 copiou, alterou ou apagou dado pessoal. Por exemplo:
 
 - acesso estranho à VPS ou ao MySQL;
-- o `.env` exposto num commit, num print ou num servidor invadido. Ele tem as
-  chaves da Pluggy e do Gemini;
+- o `.env` exposto num commit, num print ou num servidor invadido. Ele tem a
+  chave do Gemini e a `FIN_CHAVE_CREDENCIAIS`, que abre as credenciais da
+  Pluggy guardadas no banco;
 - um backup ou a frase da cifra exposto;
 - uma pessoa vendo dado de outra, por bug de isolamento;
 - a conta de alguém acessada por terceiro;
@@ -21,7 +22,10 @@ copiou, alterou ou apagou dado pessoal. Por exemplo:
   API e o servidor web.
 - **Derrube todas as sessões:** `mysql local_finance -e "DELETE FROM sessoes"`.
 - **Troque o que pode ter vazado:**
-  - o Client Secret da Pluggy (no dashboard);
+  - as credenciais da Pluggy. Se o banco e o `.env` vazaram juntos, o Client
+    Secret de todo mundo pode ter vazado: cada pessoa gera um novo na
+    dashboard da Pluggy e cadastra de novo em Contas. Troque também a
+    `FIN_CHAVE_CREDENCIAIS`; as credenciais antigas deixam de abrir;
   - a chave do Gemini (no AI Studio);
   - o token da brapi;
   - a senha do MySQL;

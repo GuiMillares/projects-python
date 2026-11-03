@@ -336,11 +336,16 @@ CONFERIR NÚMEROS (28/10/2026), tela /app/contas/conferir:
 * 66 asserções contra Pluggy simulada (rotas reais + MySQL, usuários
   descartáveis). Tela conferida em 800px e 375px, temas claro e escuro.
 
->>> CREDENCIAIS: FIN_PLUGGY_CLIENT_ID e FIN_PLUGGY_CLIENT_SECRET no arquivo
->>> "projeto finanças/.env" (está no .gitignore), lido por api/config.py.
->>> Variável de ambiente do Windows com o mesmo nome ganha do .env.
->>> Validadas contra a Pluggy real em 27/10/2026. Em outro PC, copiar o
->>> .env à mão (ele não vai pelo git).
+>>> CREDENCIAIS (desde 03/11/2026): POR PESSOA, não mais no .env. A Pluggy
+>>> respondeu que o Meu Pluggy gratuito é só para as contas da própria
+>>> pessoa, intransferível, até 5 contas, com login próprio. Então cada um
+>>> cadastra em Contas o Client ID e o Client Secret da PRÓPRIA aplicação
+>>> (dashboard.pluggy.ai, com o conector MeuPluggy). Tabela
+>>> credenciais_pluggy; o segredo vai cifrado por api/cofre.py (Fernet) com
+>>> FIN_CHAVE_CREDENCIAIS do .env, e nunca volta numa resposta. Toda função
+>>> pública de openfinance.py recebe a Credencial de quem pede; o cache da
+>>> chave e dos itens é separado por client_id. FIN_PLUGGY_CLIENT_ID e
+>>> _SECRET do .env não são mais lidos.
 
 
 9. O QUE JÁ FOI TESTADO

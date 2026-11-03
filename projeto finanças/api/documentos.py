@@ -12,8 +12,8 @@ recebendo dado, cobrança, backup com outro prazo), o texto muda junto.
 
 import config
 
-VERSAO = "2026-10-28"
-VERSAO_POR_EXTENSO = "28 de outubro de 2026"
+VERSAO = "2026-11-03"
+VERSAO_POR_EXTENSO = "3 de novembro de 2026"
 
 
 def _secao(titulo, *paragrafos, itens=None):
@@ -46,6 +46,9 @@ TERMOS = {
             "operar no Open Finance. Você dá o consentimento no app do seu banco e pode "
             "revogá-lo lá ou no Meu Pluggy quando quiser. A conexão só lê dados: o app não "
             "movimenta dinheiro, não faz pagamento e não pede a senha do banco.",
+            "O plano gratuito da Pluggy é pessoal e intransferível. Por isso cada pessoa usa a "
+            "própria conta no Meu Pluggy e a própria aplicação na Pluggy, e cadastra no app as "
+            "credenciais dessa aplicação. O app usa a sua credencial só para ler os seus dados.",
         ),
         _secao(
             "5. Os números e as sugestões",
@@ -110,10 +113,11 @@ def _privacidade():
                     "descrição, valor e categoria), orçamentos, regras de categoria, "
                     "investimentos (código do ativo, quantidade e preço) e metas com seus "
                     "passos.",
-                    "Open Finance: o identificador de cada conexão na Pluggy e as transações "
-                    "importadas. Saldos e faturas são lidos na hora e não ficam guardados. "
-                    "Os lançamentos que a importação deixou fora da soma ficam guardados "
-                    "para a conferência dos números.",
+                    "Open Finance: o Client ID e o Client Secret da sua aplicação na Pluggy "
+                    "(o segredo guardado cifrado), o identificador de cada conexão e as "
+                    "transações importadas. Saldos e faturas são lidos na hora e não ficam "
+                    "guardados. Os lançamentos que a importação deixou fora da soma ficam "
+                    "guardados para a conferência dos números.",
                     "Registros de segurança: as sessões abertas (só o resumo do código de "
                     "acesso), as tentativas de login erradas e a versão destes documentos "
                     "que você aceitou, com data e hora.",
@@ -135,8 +139,9 @@ def _privacidade():
             _secao(
                 "5. Com quem os dados são compartilhados",
                 itens=[
-                    "Pluggy: lê os dados das suas contas e cartões no Open Finance, com o "
-                    "consentimento que você dá no banco, e segue as regras do Banco Central.",
+                    "Pluggy: lê os dados das suas contas e cartões no Open Finance, pela sua "
+                    "própria aplicação e com o consentimento que você dá no banco, e segue as "
+                    "regras do Banco Central.",
                     "Google (Gemini): só quando você pede sugestão de passos para uma meta. "
                     "Vão o título, a descrição, o valor alvo, o prazo e os passos que a meta "
                     "já tem. Não vão nome, e-mail, renda nem lançamentos. No plano gratuito "
@@ -166,6 +171,8 @@ def _privacidade():
                     "Senha guardada só como resumo criptográfico e verificação em duas etapas "
                     "no login.",
                     "O código de cada sessão também é guardado só como resumo.",
+                    "O Client Secret da sua aplicação na Pluggy fica cifrado no banco, com uma "
+                    "chave guardada fora dele, e nunca volta para a tela.",
                     "Cada pessoa só acessa os próprios dados, e a API confere isso em toda "
                     "requisição.",
                     "Chaves e senhas de serviços ficam fora do código do app.",
