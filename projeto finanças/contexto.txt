@@ -1,9 +1,11 @@
-CONTEXTO DO PROJETO: Painel financeiro pessoal
-==============================================
+CONTEXTO DO PROJETO: Lastro (painel financeiro pessoal)
+=======================================================
 Cole este arquivo no Claude Code de casa (ou do trabalho) para retomar o
 trabalho.
-Última atualização: 18/08/2026 (Fase 1 fechada e commitada: metas com IA,
-escada de 300 níveis com borda por divisão, modais de exclusão, abas)
+Última atualização: 17/11/2026 (o app virou Lastro, está no ar em
+https://meulastro.vercel.app com banco no TiDB Cloud, instalável no
+celular como PWA, e a tela Contas tem passo a passo de conexão. Ver a
+seção 13.)
 
 
 1. O QUE É
@@ -118,6 +120,10 @@ Ele rejeita estética de "template gerado por IA". Regras concretas:
   foi removido.
 * Sem gradiente ou glassmorphism decorativo. Sem excesso de card com sombra
   suave e canto muito arredondado.
+* EXCEÇÃO (27/10/2026): as pedras da escada de níveis (ametista,
+  água-marinha, tanzanita, safira) usam a cor real da pedra, mesmo sendo
+  roxa ou azul. A regra é contra cor decorativa, não contra a cor
+  verdadeira da coisa. Fora dos tokens --fin-gema-*, a proibição vale.
 * Ícones lucide-react. NENHUM emoji na interface.
 * SEM TRAVESSÃO (o traço longo) em texto nenhum, nem em comentário. Pediu
   explicitamente para tirar todos; use dois-pontos, vírgula ou ponto.
@@ -467,6 +473,10 @@ que aconteceria com o bônus de XP. Ajuste de dois minutos em Metas.jsx.
 
 11. FASE 2: BLOQUEADA, NÃO INICIADA
 ------------------------------------
+>>> 17/11/2026: o dono escolheu outro caminho para sair do PC: Vercel +
+>>> Flask + MySQL externo (seção 13), sem Firebase. O espaço do casal vai
+>>> ser feito no MySQL. O plano abaixo fica só como registro.
+
 O plano combinado: duplicar o projeto para "projeto financas-firestore/",
 trocando Flask+MySQL por Firebase Auth + Firestore, com espaços
 (workspaces) compartilhados para casal e empresas. O projeto ATUAL continua
@@ -540,4 +550,66 @@ o preço médio a partir da cotação ao vivo do ticker digitado.
 Feito em 18/08/2026: Fase 1 inteira (metas com subtarefas por IA via
 Gemini, escada de 300 níveis com borda por divisão, modais de confirmação
 de exclusão, aba de concluídas), GEMINI_API_KEY configurada e a geração
-validada com chamada real. Commit e4c1ecf.
+validada com chamada real. Commit 1b22df8 (era e4c1ecf antes da
+reescrita do histórico em 28/10/2026).
+
+
+13. PRODUÇÃO: VERCEL + TIDB CLOUD (17/11/2026)
+-----------------------------------------------
+Nome do app: LASTRO. Endereço: https://meulastro.vercel.app (subdomínio
+da Vercel, escolhido de propósito como DEFINITIVO: passkeys, que vêm aí,
+ficam presas ao domínio). O app não é só do casal: pensar como produto.
+
+Como está montado:
+* vercel.json com "builds": só api/index.py vira função Python (sem isso
+  a Vercel faz de CADA .py de api/ uma função). ui/package.json é o build
+  estático. /api/... vai para o Flask, o resto para o React. Root
+  Directory do projeto na Vercel: "projeto finanças". Deploy automático a
+  cada push no main.
+* api/index.py é a entrada da Vercel. Fixa o fuso em UTC-3 (TZ POSIX
+  "<-03>3", sem depender de tzdata) e FIN_DB_FUSO=-03:00 na sessão do
+  MySQL. Motivo: o código mistura datetime.now() com NOW() e a Vercel roda
+  em UTC.
+* Banco: TiDB Cloud Starter (compatível com MySQL), AWS us-east-1, mesma
+  região das funções da Vercel. Limite de gasto $0: se a cota grátis
+  acabar, fica lento, nunca cobra. Banco local_finance, criado pelo
+  db/schema.sql.
+  ATENÇÃO: o TiDB aceita os CHECK do esquema mas NÃO os aplica. A
+  validação de valor > 0 etc. tem de continuar no Python.
+* Conexão com o banco por TLS com certificado conferido (FIN_DB_SSL=1,
+  db.py usa o certifi). O banco aceita qualquer IP (a Vercel não tem IP
+  fixo): a proteção é senha forte + TLS.
+* Variáveis na Vercel: FIN_DB_HOST/PORT/USER/PASS/NAME, FIN_DB_SSL=1,
+  FIN_CHAVE_CREDENCIAIS (chave própria da produção), GEMINI_API_KEY,
+  FIN_BRAPI_TOKEN, FIN_CONTROLADOR_NOME/CONTATO. Valores no gerenciador
+  de senhas, nunca no repositório.
+* Front: o build da Vercel liga VITE_API_MESMA_ORIGEM=1 (no vercel.json)
+  e as chamadas viram relativas. No PC continua http://127.0.0.1:8756.
+* .vercelignore barra .env, bancos locais e ops/ num deploy pela CLI.
+* No PC NADA mudou: sem as variáveis novas, segue Laragon e python app.py.
+
+PWA (instalável, sem loja):
+* ui/public/manifest.webmanifest (standalone), ícones gerados na paleta,
+  sw.js que guarda SÓ a casca (/api e Pluggy nunca passam pelo cache).
+* iPhone: status bar black-translucent; a borda de cima da topbar ocupa a
+  área segura com o token --fin-statusbar (escuro nos dois temas, porque o
+  iOS escreve o relógio em branco).
+* InstalarApp.jsx: botão Instalar no Android, instrução do Safari no
+  iPhone. Some ao fechar.
+
+Tela Contas: sem nenhuma conexão, mostra o guia "Comece por aqui" em 4
+passos (Meu Pluggy, aplicação na dashboard com o conector MeuPluggy,
+colar a credencial, conectar). O Client Secret da Pluggy aparece UMA vez
+só, na criação da aplicação; o guia avisa.
+
+Documentos LGPD: VERSAO 2026-11-17. A política agora cita Vercel e TiDB
+Cloud nos EUA (transferência internacional, art. 33).
+
+Próximos passos, nesta ordem:
+1. Passkey (Face ID / digital, WebAuthn verificado no servidor) para não
+   pedir senha + código a cada abertura do app no celular. Senha + TOTP
+   continuam como entrada de reserva.
+2. Espaço do casal: visão Eu / Ela / Juntos, tudo compartilhado por
+   padrão com opção de privado, Pix entre os dois fora da soma, metas
+   individuais e do casal. Cada pessoa com a PRÓPRIA credencial Pluggy.
+3. Backup do TiDB (ops/backup.py foi escrito para o MySQL local).
