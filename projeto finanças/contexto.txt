@@ -738,6 +738,12 @@ Espaço, entrega 3, e cadastro aberto (17/11/2026):
   só sobe quando muda o que acontece com os dados.
 * 43 verificações novas; as baterias antigas seguem passando.
 
+Backup do TiDB (17/11/2026):
+* ops/backup.py fazer --origem ARQUIVO lê o TiDB por TLS (usuário só de
+  leitura, arquivo fora do repo) e cifra com gpg; testar restaura no MySQL
+  local. ops/backup-tidb.cmd para o Agendador do Windows, pasta
+  %USERPROFILE%/backups-financas. Roteiro em ops/BACKUP.md, "TiDB na nuvem".
+
 Próximos passos, nesta ordem:
-1. Backup do TiDB (ops/backup.py foi escrito para o MySQL local).
+1. Interface do celular (o Guilherme vai mandar um vídeo de referência).
 2. Importar OFX/CSV; editar lançamento existente.

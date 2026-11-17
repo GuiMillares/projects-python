@@ -124,3 +124,81 @@ ele pula o backup do estado atual.
 VPS, antes de abrir o app para outras pessoas, rode um `fazer`, confira o
 arquivo no provedor e repita o ensaio de restauração a partir da cópia
 externa.
+
+## TiDB na nuvem (o que está em produção hoje)
+
+O app roda na Vercel com o banco no TiDB Cloud. O backup sai do TiDB por TLS
+e fica no seu computador, cifrado, por 30 dias. O teste de restauração usa o
+MySQL local (Laragon): nada é criado no TiDB.
+
+### Preparar (uma vez)
+
+1. No TiDB Cloud, abra o **SQL Editor** do cluster e crie um usuário só de
+   leitura. No plano Starter todo usuário começa com o prefixo do cluster,
+   o mesmo que aparece antes do `.root` no seu usuário:
+   ```sql
+   CREATE USER '<PREFIXO>.backup'@'%' IDENTIFIED BY 'uma-senha-forte-e-nova';
+   GRANT SELECT, SHOW VIEW ON local_finance.* TO '<PREFIXO>.backup'@'%';
+   ```
+   Se esse arquivo vazar, quem o achar só lê; não apaga nem altera nada.
+2. No Git Bash, crie a pasta, a frase da cifra e o arquivo da origem, todos
+   fora do repositório:
+   ```bash
+   mkdir -p ~/backups-financas
+   head -c 48 /dev/urandom | base64 > ~/backups-financas/backup.frase
+   cat > ~/backups-financas/tidb.env <<'FIM'
+   FIN_DB_HOST=<host do TiDB>
+   FIN_DB_PORT=4000
+   FIN_DB_USER=<PREFIXO>.backup
+   FIN_DB_PASS=<a senha do passo 1>
+   FIN_DB_NAME=local_finance
+   FIN_DB_SSL=1
+   FIM
+   ```
+   Guarde uma cópia da `backup.frase` no gerenciador de senhas **agora**.
+   Sem ela, nenhum backup abre.
+3. Primeiro backup e teste (o Laragon precisa estar com o MySQL ligado para o
+   teste):
+   ```bash
+   cmd //c ops\backup-tidb.cmd
+   tail -3 ~/backups-financas/backup.log
+   FIN_BACKUP_DIR=~/backups-financas FIN_BACKUP_SENHA_ARQUIVO=~/backups-financas/backup.frase \
+   FIN_MYSQL_BIN="C:/laragon/bin/mysql/mysql-8.4.3-winx64/bin" FIN_GPG=/usr/bin/gpg \
+   ../.venv/Scripts/python.exe ops/backup.py testar
+   ```
+
+### Agenda
+
+No Prompt de Comando (cmd), uma vez, para rodar todo dia às 21h:
+```
+schtasks /Create /SC DAILY /ST 21:00 /TN "Lastro backup" /TR "\"F:\projects-python\projeto finanças\ops\backup-tidb.cmd\""
+```
+O Agendador só roda com o computador ligado. Se ele estiver desligado às
+21h, o backup daquele dia não acontece; o seguinte segue normal. Para não
+depender só deste computador, configure uma cópia externa (`rclone config`
+com o Google Drive, por exemplo) e ponha `set "FIN_BACKUP_RCLONE=gdrive:lastro-backup"`
+no `backup-tidb.cmd`. O arquivo já sai cifrado.
+
+Rode o `testar` uma vez por semana (passo 3). A última linha de
+`~/backups-financas/restauracao.log` precisa ser `ok` e desta semana.
+
+### Restaurar no TiDB (desastre)
+
+1. Escolha o backup e teste-o no MySQL local, como no passo 3, com o nome do
+   arquivo no fim do `testar`.
+2. Restaure apontando as `FIN_DB_*` para o TiDB com o usuário **root** (o de
+   backup só lê). O script testa o arquivo de novo e guarda um
+   `antes-de-restaurar-*` do estado atual antes de trocar:
+   ```bash
+   FIN_DB_HOST=<host> FIN_DB_PORT=4000 FIN_DB_USER=<PREFIXO>.root FIN_DB_PASS='<senha>' FIN_DB_SSL=1 \
+   FIN_BACKUP_DIR=~/backups-financas FIN_BACKUP_SENHA_ARQUIVO=~/backups-financas/backup.frase \
+   FIN_MYSQL_BIN="C:/laragon/bin/mysql/mysql-8.4.3-winx64/bin" FIN_GPG=/usr/bin/gpg \
+   ../.venv/Scripts/python.exe ops/backup.py restaurar ~/backups-financas/financas-AAAAMMDD-HHMMSS.sql.gpg --confirmo
+   ```
+3. Rode `ops/atualizar_banco.py` se o backup for de antes de alguma mudança
+   no banco, e confira `/api/saude`.
+
+**Testado em 17/11/2026:** `fazer --origem` com um usuário só de leitura e
+`testar` no MySQL local, com o arquivo cifrado e as contagens batendo. O
+dump contra o próprio TiDB (TLS e as opções `--column-statistics=0` e
+`--set-gtid-purged=OFF`) é conferido no primeiro backup de verdade.

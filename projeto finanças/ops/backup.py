@@ -1,12 +1,15 @@
 """Backup cifrado do banco e teste de restauração.
 
-    python ops/backup.py fazer
+    python ops/backup.py fazer [--origem ARQUIVO]
         dump do banco, cifrado com gpg, mais um manifesto com a contagem de
         linhas; apaga os backups mais velhos que FIN_BACKUP_DIAS e, se
         configurado, copia para fora do servidor com rclone.
+        --origem lê o banco descrito no ARQUIVO (o TiDB na nuvem, por TLS)
+        em vez do banco das FIN_DB_*. Ver ops/BACKUP.md, "TiDB".
 
     python ops/backup.py testar [ARQUIVO]
-        restaura o backup mais recente (ou ARQUIVO) num banco temporário,
+        restaura o backup mais recente (ou ARQUIVO) num banco temporário do
+        banco das FIN_DB_* (o MySQL local, mesmo para backup do TiDB),
         confere contagens e órfãos, e apaga o banco temporário.
 
     python ops/backup.py restaurar ARQUIVO --confirmo
@@ -30,6 +33,7 @@ ops/BACKUP.md.
 
 import argparse
 import hashlib
+import ssl
 import json
 import os
 import subprocess
@@ -58,21 +62,66 @@ class Falha(Exception):
     pass
 
 
+# Onde o backup é lido e onde o teste restaura. LOCAL vem das FIN_DB_* da
+# API; a origem pode ser trocada por --origem (TiDB). O teste e a
+# restauração usam sempre LOCAL: nunca se cria banco temporário na nuvem.
+LOCAL = {
+    "host": config.DB_HOST, "porta": config.DB_PORT, "usuario": config.DB_USER,
+    "senha": config.DB_PASS, "nome": config.DB_NAME, "ssl": config.DB_SSL,
+}
+
+
+def ler_origem(caminho):
+    """Arquivo KEY=VALOR com FIN_DB_HOST, FIN_DB_PORT, FIN_DB_USER,
+    FIN_DB_PASS, FIN_DB_NAME e FIN_DB_SSL. Fica fora do repositório e
+    protegido como a frase da cifra."""
+    arq = Path(caminho).expanduser()
+    if not arq.is_file():
+        raise Falha(f"--origem: {arq} não existe.")
+    if arq.resolve().is_relative_to(RAIZ_PROJETO.parent.resolve()):
+        raise Falha(f"--origem: {arq} está dentro do repositório. Guarde fora dele.")
+    if os.name == "posix" and arq.stat().st_mode & 0o077:
+        raise Falha(f"{arq} pode ser lido por outros usuários. Rode: chmod 600 {arq}")
+    v = {}
+    for linha in arq.read_text(encoding="utf-8").splitlines():
+        linha = linha.strip()
+        if linha and not linha.startswith("#") and "=" in linha:
+            k, _, valor = linha.partition("=")
+            v[k.strip()] = valor.strip().strip('"').strip("'")
+    faltando = [k for k in ("FIN_DB_HOST", "FIN_DB_USER", "FIN_DB_PASS") if not v.get(k)]
+    if faltando:
+        raise Falha(f"--origem: faltam {', '.join(faltando)} em {arq}.")
+    return {
+        "host": v["FIN_DB_HOST"], "porta": int(v.get("FIN_DB_PORT", "4000")),
+        "usuario": v["FIN_DB_USER"], "senha": v["FIN_DB_PASS"],
+        "nome": v.get("FIN_DB_NAME", "local_finance"), "ssl": v.get("FIN_DB_SSL", "1") == "1",
+    }
+
+
+def _ca():
+    import certifi
+    return certifi.where()
+
+
 def _bin(nome):
     pasta = os.getenv("FIN_MYSQL_BIN", "").strip()
     return str(Path(pasta) / nome) if pasta else nome
 
 
-def _args_mysql():
-    return ["-h", config.DB_HOST, "-P", str(config.DB_PORT), "-u", config.DB_USER]
+def _args_mysql(alvo=LOCAL):
+    args = ["-h", alvo["host"], "-P", str(alvo["porta"]), "-u", alvo["usuario"]]
+    if alvo["ssl"]:
+        # TLS com o certificado conferido, como a API faz (db.py).
+        args += ["--ssl-mode=VERIFY_IDENTITY", f"--ssl-ca={_ca()}"]
+    return args
 
 
-def _env_mysql():
+def _env_mysql(alvo=LOCAL):
     # Senha por variável de ambiente, e não na linha de comando: argumento
     # aparece para qualquer usuário do servidor no `ps`.
     env = dict(os.environ)
-    if config.DB_PASS:
-        env["MYSQL_PWD"] = config.DB_PASS
+    if alvo["senha"]:
+        env["MYSQL_PWD"] = alvo["senha"]
     return env
 
 
@@ -97,17 +146,19 @@ def _pasta():
     return PASTA
 
 
-def _conectar(banco=None):
+def _conectar(banco=None, alvo=LOCAL):
+    contexto = ssl.create_default_context(cafile=_ca()) if alvo["ssl"] else None
     return pymysql.connect(
-        host=config.DB_HOST, port=config.DB_PORT, user=config.DB_USER,
-        password=config.DB_PASS, database=banco, charset="utf8mb4", autocommit=True,
+        host=alvo["host"], port=alvo["porta"], user=alvo["usuario"],
+        password=alvo["senha"], database=banco, charset="utf8mb4", autocommit=True,
+        ssl=contexto,
     )
 
 
-def _contar(banco):
+def _contar(banco, alvo=LOCAL):
     """Linhas por tabela, com COUNT(*) de verdade: o TABLE_ROWS do
     information_schema é estimativa no InnoDB."""
-    con = _conectar(banco)
+    con = _conectar(banco, alvo)
     try:
         with con.cursor() as cur:
             cur.execute("SHOW TABLES")
@@ -155,30 +206,34 @@ def _podar(pasta):
     return apagados
 
 
-def fazer(rotulo="financas"):
+def fazer(rotulo="financas", origem=LOCAL):
     pasta, frase = _pasta(), _frase()
     nome = f"{rotulo}-{datetime.now():%Y%m%d-%H%M%S}.sql.gpg"
     final = pasta / nome
     parcial = pasta / f"{nome}.parcial"
 
     # Sem --routines: o schema não tem procedure, e pedir isso exigiria um
-    # privilégio a mais para o usuário de backup.
-    dump = [_bin("mysqldump"), *_args_mysql(), "--single-transaction", "--quick",
-            "--no-tablespaces", "--default-character-set=utf8mb4", config.DB_NAME]
+    # privilégio a mais para o usuário de backup. --column-statistics=0 e
+    # --set-gtid-purged=OFF: o TiDB não tem a tabela de estatísticas nem
+    # GTID que o mysqldump 8 consulta; no MySQL não mudam nada.
+    dump = [_bin("mysqldump"), *_args_mysql(origem), "--single-transaction", "--quick",
+            "--no-tablespaces", "--column-statistics=0", "--set-gtid-purged=OFF",
+            "--default-character-set=utf8mb4", origem["nome"]]
     cifra = [GPG, "--batch", "--yes", "--pinentry-mode", "loopback", "--passphrase-file", frase,
              "--symmetric", "--cipher-algo", "AES256", "-o", str(parcial)]
     try:
-        _rodar_pipe((dump, _env_mysql()), (cifra, None), ("mysqldump", "gpg"))
+        _rodar_pipe((dump, _env_mysql(origem)), (cifra, None), ("mysqldump", "gpg"))
     except Falha:
         parcial.unlink(missing_ok=True)
         raise
-    contagem = _contar(config.DB_NAME)
+    contagem = _contar(origem["nome"], origem)
     parcial.rename(final)
 
     (pasta / f"{final.stem.removesuffix('.sql')}.json").write_text(json.dumps({
         "arquivo": nome,
         "criadoEm": datetime.now().isoformat(timespec="seconds"),
-        "banco": config.DB_NAME,
+        "banco": origem["nome"],
+        "origem": origem["host"],
         "sha256": _sha256(final),
         "tabelas": contagem,
     }, indent=2), encoding="utf-8")
@@ -324,7 +379,8 @@ def _avisar(ok):
 def main():
     p = argparse.ArgumentParser(description="Backup cifrado e teste de restauração.")
     sub = p.add_subparsers(dest="cmd", required=True)
-    sub.add_parser("fazer")
+    f = sub.add_parser("fazer")
+    f.add_argument("--origem", help="arquivo com o banco de onde ler (TiDB)")
     t = sub.add_parser("testar")
     t.add_argument("arquivo", nargs="?")
     r = sub.add_parser("restaurar")
@@ -334,7 +390,7 @@ def main():
 
     try:
         if a.cmd == "fazer":
-            fazer()
+            fazer(origem=ler_origem(a.origem) if a.origem else LOCAL)
         elif a.cmd == "testar":
             testar(a.arquivo)
         else:
