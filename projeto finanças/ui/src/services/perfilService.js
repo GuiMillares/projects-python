@@ -32,7 +32,7 @@ export async function exportarDados() {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `meus-dados-financas-${dados.exportadoEm.slice(0, 10)}.json`;
+  a.download = `meus-dados-lastro-${dados.exportadoEm.slice(0, 10)}.json`;
   a.click();
   URL.revokeObjectURL(url);
 }

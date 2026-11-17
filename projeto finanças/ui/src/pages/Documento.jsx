@@ -26,7 +26,7 @@ export default function Documento({ tipo }) {
       <div className="fin-legal__col">
         <div className="fin-legal__topo">
           <div className="fin-login__mark">
-            <Wallet size={17} /> Finanças
+            <Wallet size={17} /> Lastro
           </div>
           <button className="fin-btn fin-btn--ghost fin-btn--sm" onClick={voltar}>
             <ArrowLeft size={13} /> Voltar

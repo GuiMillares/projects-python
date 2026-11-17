@@ -71,7 +71,7 @@ SESSAO_PARCIAL_MINUTOS = 10
 MAX_TENTATIVAS = 5
 BLOQUEIO_MINUTOS = 15
 
-EMISSOR_TOTP = os.getenv("FIN_TOTP_EMISSOR", "Financas")
+EMISSOR_TOTP = os.getenv("FIN_TOTP_EMISSOR", "Lastro")
 
 # ── LGPD ─────────────────────────────────────────────────────
 # Quem responde pelos dados desta instalação (o controlador) e como falar

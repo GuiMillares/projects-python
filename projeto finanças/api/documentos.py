@@ -12,8 +12,8 @@ recebendo dado, cobrança, backup com outro prazo), o texto muda junto.
 
 import config
 
-VERSAO = "2026-11-03"
-VERSAO_POR_EXTENSO = "3 de novembro de 2026"
+VERSAO = "2026-11-17"
+VERSAO_POR_EXTENSO = "17 de novembro de 2026"
 
 
 def _secao(titulo, *paragrafos, itens=None):
@@ -25,7 +25,7 @@ TERMOS = {
     "secoes": [
         _secao(
             "1. O que é este app",
-            "É um app de finanças pessoais feito e mantido por uma pessoa só, usado por "
+            "O Lastro é um app de finanças pessoais feito e mantido por uma pessoa só, usado por "
             "convite entre família e amigos. Ele reúne num lugar seus lançamentos, contas, "
             "cartões, investimentos e metas.",
         ),
@@ -150,8 +150,15 @@ def _privacidade():
                     "da LGPD). Não escreva na meta nada que você não mandaria ao Google.",
                     "brapi.dev: recebe só os códigos dos ativos da sua carteira (por exemplo, "
                     "PETR4) para buscar a cotação. Nenhum dado seu vai junto.",
-                    "Servidor: os dados ficam no banco de dados do servidor onde o app roda, "
-                    "contratado por quem mantém o app.",
+                    "Vercel: hospeda o app e roda o servidor dele. Seus dados passam por lá a "
+                    "cada uso, mas não ficam guardados lá.",
+                    "TiDB Cloud (da PingCAP, em servidores da Amazon): guarda o banco de dados "
+                    "do app, cifrado no disco. É onde ficam os dados da seção 2.",
+                    "Vercel e TiDB Cloud ficam nos Estados Unidos, então seus dados são "
+                    "tratados fora do Brasil (transferência internacional, art. 33 da LGPD), "
+                    "com o consentimento que você dá ao aceitar esta política. Os dois são "
+                    "contratados por quem mantém o app e só processam os dados para fazer o "
+                    "app funcionar.",
                 ],
             ),
             _secao(
@@ -171,6 +178,8 @@ def _privacidade():
                     "Senha guardada só como resumo criptográfico e verificação em duas etapas "
                     "no login.",
                     "O código de cada sessão também é guardado só como resumo.",
+                    "Conexão sempre cifrada: entre o seu aparelho e o servidor (HTTPS) e "
+                    "entre o servidor e o banco de dados.",
                     "O Client Secret da sua aplicação na Pluggy fica cifrado no banco, com uma "
                     "chave guardada fora dele, e nunca volta para a tela.",
                     "Cada pessoa só acessa os próprios dados, e a API confere isso em toda "

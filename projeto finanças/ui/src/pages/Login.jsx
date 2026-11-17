@@ -109,7 +109,7 @@ export default function Login() {
     <div className="fin-login">
       <aside className="fin-login__aside">
         <div className="fin-login__mark">
-          <Wallet size={17} /> Finanças
+          <Wallet size={17} /> Lastro
         </div>
 
         <div>
@@ -132,7 +132,7 @@ export default function Login() {
       <main className="fin-login__panel">
         <div className="fin-login__form-wrap">
           <div className="fin-login__brand-mobile">
-            <Wallet size={16} /> Finanças
+            <Wallet size={16} /> Lastro
           </div>
 
           {step === "login" && (

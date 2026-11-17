@@ -349,7 +349,7 @@ def exportar_conta():
     )
     dados = {
         "exportadoEm": datetime.now().isoformat(timespec="seconds"),
-        "sobre": "Exportação dos seus dados no app de finanças (LGPD, art. 18). "
+        "sobre": "Exportação dos seus dados no Lastro (LGPD, art. 18). "
                  "Datas em ISO 8601 e valores em reais.",
         "conta": _exportavel(conta),
     }

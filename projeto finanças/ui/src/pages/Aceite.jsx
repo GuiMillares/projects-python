@@ -96,7 +96,7 @@ export default function Aceite() {
     <div className="fin-legal">
       <div className="fin-legal__col">
         <div className="fin-login__mark fin-legal__marca">
-          <Wallet size={17} /> Finanças
+          <Wallet size={17} /> Lastro
         </div>
 
         <h1 className="fin-page-title">Antes de continuar</h1>

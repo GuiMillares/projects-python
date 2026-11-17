@@ -81,7 +81,7 @@ export default function AppLayout({ children }) {
     <div className="fin-shell">
       <aside className="fin-sidebar">
         <div className="fin-sidebar__brand">
-          <Wallet size={16} /> Finanças
+          <Wallet size={16} /> Lastro
         </div>
 
         <nav className="fin-sidebar__nav">
@@ -118,7 +118,7 @@ export default function AppLayout({ children }) {
         <header className="fin-topbar">
           <div className="fin-topbar__title">
             <Wallet size={15} />
-            {TITULOS[pathname] || "Finanças"}
+            {TITULOS[pathname] || "Lastro"}
           </div>
 
           <div className="fin-topbar__right">
