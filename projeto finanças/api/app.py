@@ -25,6 +25,7 @@ import documentos
 import gamificacao
 import ia
 import openfinance
+import passkeys
 import seguranca
 from db import buscar_todos, buscar_um, cursor
 
@@ -187,6 +188,69 @@ def verificar_2fa():
 
     seguranca.limpar_falhas(sessao["usuario_id"])
     seguranca.promover_sessao(sessao["id"])
+    return jsonify({"ok": True})
+
+
+# ── Passkeys (Face ID / digital) ─────────────────────────────
+# Entrar: público, como o login com senha. A assinatura do aparelho é
+# conferida contra a chave pública guardada, e a sessão já nasce completa
+# (ver o porquê em passkeys.py). Cadastrar, listar e remover: só com
+# sessão completa.
+@app.post("/api/auth/passkey/opcoes")
+def passkey_opcoes_entrada():
+    return jsonify(passkeys.opcoes_entrada())
+
+
+@app.post("/api/auth/passkey/entrar")
+def passkey_entrar():
+    d = request.get_json(silent=True) or {}
+    resposta = d.get("resposta")
+    if not isinstance(resposta, dict):
+        return erro("Resposta do aparelho ausente.")
+    try:
+        usuario_id = passkeys.entrar(d.get("desafioId"), resposta)
+    except passkeys.PasskeyInvalida as e:
+        return erro(str(e), e.status or 401)
+
+    seguranca.limpar_sessoes_expiradas()
+    token = seguranca.criar_sessao(usuario_id, dois_fatores_ok=True)
+    return jsonify({"token": token})
+
+
+@app.get("/api/passkeys")
+@exige_sessao()
+def passkeys_listar():
+    return jsonify({"passkeys": passkeys.listar(g.sessao["usuario_id"])})
+
+
+@app.post("/api/passkeys/opcoes")
+@exige_sessao()
+def passkeys_opcoes_cadastro():
+    s = g.sessao
+    return jsonify(passkeys.opcoes_cadastro(s["usuario_id"], s["email"], s["nome"]))
+
+
+@app.post("/api/passkeys")
+@exige_sessao()
+def passkeys_cadastrar():
+    d = request.get_json(silent=True) or {}
+    resposta = d.get("resposta")
+    if not isinstance(resposta, dict):
+        return erro("Resposta do aparelho ausente.")
+    try:
+        nova = passkeys.cadastrar(
+            g.sessao["usuario_id"], d.get("desafioId"), resposta, d.get("apelido") or ""
+        )
+    except passkeys.PasskeyInvalida as e:
+        return erro(str(e), 400)
+    return jsonify(nova), 201
+
+
+@app.delete("/api/passkeys/<int:passkey_id>")
+@exige_sessao()
+def passkeys_remover(passkey_id):
+    if not passkeys.remover(g.sessao["usuario_id"], passkey_id):
+        return erro("Passkey não encontrada.", 404)
     return jsonify({"ok": True})
 
 
@@ -385,6 +449,9 @@ def exportar_conta():
         "SELECT client_id, atualizado_em FROM credenciais_pluggy WHERE usuario_id = %s", (uid,)
     )
     dados["credencialPluggy"] = _exportavel(credencial) if credencial else None
+    # Passkeys: só apelido e datas. A chave pública não serve para nada fora
+    # daqui, e o id da credencial é detalhe técnico.
+    dados["passkeys"] = passkeys.listar(uid)
     return jsonify(dados)
 
 

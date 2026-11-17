@@ -602,14 +602,42 @@ passos (Meu Pluggy, aplicação na dashboard com o conector MeuPluggy,
 colar a credencial, conectar). O Client Secret da Pluggy aparece UMA vez
 só, na criação da aplicação; o guia avisa.
 
-Documentos LGPD: VERSAO 2026-11-17. A política agora cita Vercel e TiDB
-Cloud nos EUA (transferência internacional, art. 33).
+Documentos LGPD: VERSAO 2026-11-17.2. A política cita Vercel e TiDB
+Cloud nos EUA (transferência internacional, art. 33) e as passkeys.
+
+2FA (17/11/2026, corrigido depois do deploy):
+* /api/auth/2fa/setup NÃO troca o segredo de quem já tem 2FA ativo (409).
+  Antes, só a senha bastava para pôr outro autenticador no lugar.
+* Cadastro pendente reaproveita o segredo (o celular sai para o app
+  autenticador e pode recarregar a página na volta).
+* /api/auth/2fa/verify respeita o bloqueio por tentativas.
+* registrar_falha: no MySQL o SET roda da esquerda para a direita; o CASE
+  do bloqueio tem de vir ANTES do incremento.
+* Tela do QR: botão otpauth:// ("Abrir no app autenticador") e a chave com
+  copiar, porque não dá para ler o QR com o próprio celular.
+* Configurações: "Trocar de celular" = desativar com código atual e
+  cadastrar o novo (o servidor não troca segredo de 2FA ativo).
+
+PASSKEYS (api/passkeys.py, tabelas passkeys e desafios_webauthn):
+* WebAuthn com py_webauthn 3.0.1 e @simplewebauthn/browser 14. RP_ID fixo
+  meulastro.vercel.app (api/index.py). NÃO trocar o domínio.
+* Passkey descobrível + user_verification REQUIRED. A entrada por passkey
+  já nasce sessão completa (aparelho + biometria = dois fatores).
+* Desafio no banco, uso único, 5 min: na Vercel não há memória de processo.
+* Cadastro só com sessão completa. Senha + TOTP continuam como reserva.
+* Front: o login abre o Face ID sozinho se o aparelho tem a marca local
+  fin_passkey_aqui; convite "Ativar" no app (OfertaPasskey); lista e
+  remoção em Configurações.
+* 20 verificações com autenticador de software (scratchpad do PC de casa,
+  não versionado): desafio reusado, outra chave, site falso, outra pessoa.
+
+TEMA: modo "aparelho" (padrão), "claro" ou "escuro", chave fin_tema_modo.
+No modo aparelho segue prefers-color-scheme ao vivo. Script no <head> do
+index.html aplica antes da primeira pintura. Escolha em Configurações >
+Aparência; o botão da topbar fixa o oposto do que está na tela.
 
 Próximos passos, nesta ordem:
-1. Passkey (Face ID / digital, WebAuthn verificado no servidor) para não
-   pedir senha + código a cada abertura do app no celular. Senha + TOTP
-   continuam como entrada de reserva.
-2. Espaço do casal: visão Eu / Ela / Juntos, tudo compartilhado por
+1. Espaço do casal: visão Eu / Ela / Juntos, tudo compartilhado por
    padrão com opção de privado, Pix entre os dois fora da soma, metas
    individuais e do casal. Cada pessoa com a PRÓPRIA credencial Pluggy.
-3. Backup do TiDB (ops/backup.py foi escrito para o MySQL local).
+2. Backup do TiDB (ops/backup.py foi escrito para o MySQL local).

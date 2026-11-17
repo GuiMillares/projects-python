@@ -504,6 +504,60 @@ textarea {
   text-indent: 0.34em;
 }
 
+/* Divisória "ou" entre a passkey e o e-mail e senha no login. */
+.fin-login__ou {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 16px 0;
+  font-size: 11.5px;
+  color: var(--fin-muted);
+}
+
+.fin-login__ou::before,
+.fin-login__ou::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--fin-border);
+}
+
+/* Lista de aparelhos com passkey (Configurações). */
+.fin-passkeys {
+  list-style: none;
+  margin: 0 0 12px;
+  padding: 0;
+}
+
+.fin-passkeys__item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 0;
+  border-top: 1px solid var(--fin-border);
+}
+
+.fin-passkeys__item:last-child {
+  border-bottom: 1px solid var(--fin-border);
+}
+
+.fin-passkeys__ico {
+  flex-shrink: 0;
+  color: var(--fin-accent);
+}
+
+.fin-passkeys__corpo {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.fin-passkeys__nome {
+  font-weight: 600;
+  font-size: 12.5px;
+}
+
 /* Cadastro do 2FA: QR para outro aparelho, link e chave para este.
    No celular o link vem primeiro, porque o QR ali não serve para nada. */
 .fin-setup2fa {

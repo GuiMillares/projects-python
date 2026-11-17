@@ -12,8 +12,8 @@ recebendo dado, cobrança, backup com outro prazo), o texto muda junto.
 
 import config
 
-VERSAO = "2026-11-17"
-VERSAO_POR_EXTENSO = "17 de novembro de 2026"
+VERSAO = "2026-11-17.2"
+VERSAO_POR_EXTENSO = "17 de novembro de 2026 (entrada por passkey)"
 
 
 def _secao(titulo, *paragrafos, itens=None):
@@ -121,6 +121,10 @@ def _privacidade():
                     "Registros de segurança: as sessões abertas (só o resumo do código de "
                     "acesso), as tentativas de login erradas e a versão destes documentos "
                     "que você aceitou, com data e hora.",
+                    "Passkeys, se você cadastrar a entrada com Face ID ou digital: o nome do "
+                    "aparelho, a chave pública que ele gerou e as datas de cadastro e de uso. "
+                    "Sua biometria nunca chega ao app: ela fica no aparelho, que só confirma "
+                    "que é você.",
                 ],
             ),
             _secao(
@@ -176,7 +180,8 @@ def _privacidade():
                 "lei exigir (art. 48 da LGPD).",
                 itens=[
                     "Senha guardada só como resumo criptográfico e verificação em duas etapas "
-                    "no login.",
+                    "no login. A entrada por passkey vale como as duas etapas juntas: o aparelho "
+                    "e a biometria ou o desbloqueio dele.",
                     "O código de cada sessão também é guardado só como resumo.",
                     "Conexão sempre cifrada: entre o seu aparelho e o servidor (HTTPS) e "
                     "entre o servidor e o banco de dados.",

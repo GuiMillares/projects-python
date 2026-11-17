@@ -292,3 +292,36 @@ CREATE TABLE IF NOT EXISTS descartes (
   CONSTRAINT fk_descartes_usuario FOREIGN KEY (usuario_id)
     REFERENCES usuarios (id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ── Passkeys (entrar com Face ID / digital) ─────────────────
+-- WebAuthn: o aparelho guarda a chave privada, presa ao domínio do app, e
+-- só a libera com a biometria ou o desbloqueio dele. Aqui fica a chave
+-- PÚBLICA, com a qual o servidor confere cada entrada. A biometria nunca
+-- sai do aparelho. Ver api/passkeys.py.
+CREATE TABLE IF NOT EXISTS passkeys (
+  id             INT UNSIGNED     NOT NULL AUTO_INCREMENT,
+  usuario_id     INT UNSIGNED     NOT NULL,
+  credencial_id  VARBINARY(255)   NOT NULL,
+  chave_publica  VARBINARY(1024)  NOT NULL,
+  contador       BIGINT UNSIGNED  NOT NULL DEFAULT 0,
+  apelido        VARCHAR(80)      NOT NULL,
+  criado_em      DATETIME         NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  usado_em       DATETIME         NULL,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_passkeys_credencial (credencial_id),
+  KEY ix_passkeys_usuario (usuario_id),
+  CONSTRAINT fk_passkeys_usuario FOREIGN KEY (usuario_id)
+    REFERENCES usuarios (id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Desafio de cada cerimônia WebAuthn, de uso único. Mora no banco e não na
+-- memória porque na Vercel cada chamada pode cair numa instância diferente.
+CREATE TABLE IF NOT EXISTS desafios_webauthn (
+  id          CHAR(32)        NOT NULL,
+  desafio     VARBINARY(64)   NOT NULL,
+  tipo        VARCHAR(10)     NOT NULL,
+  usuario_id  INT UNSIGNED    NULL,
+  expira_em   DATETIME        NOT NULL,
+  PRIMARY KEY (id),
+  KEY ix_desafios_expira (expira_em)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

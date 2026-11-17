@@ -8,11 +8,9 @@
 
 import {
   ArrowLeft,
-  Check,
-  Copy,
-  ExternalLink,
   Eye,
   EyeOff,
+  Fingerprint,
   KeyRound,
   Loader2,
   ShieldCheck,
@@ -21,7 +19,15 @@ import {
 import QRCode from "qrcode";
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { limparToken } from "../services/api";
+import CadastroNoCelular from "../components/CadastroNoCelular";
+import { ApiError, limparToken } from "../services/api";
+import {
+  aparelhoTemPasskey,
+  entrarComPasskey,
+  marcarAparelho,
+  suportaPasskey,
+  textoDoErro,
+} from "../services/passkeyService";
 import {
   entrar,
   iniciarSetup2FA,
@@ -54,11 +60,47 @@ export default function Login() {
   // manda direto para o painel. Token parcial ou vencido é descartado:
   // a etapa em que ele parou não sobrevive ao reload, e repetir a senha é
   // mais seguro do que tentar adivinhar onde o fluxo estava.
+  // Aparelho que já tem passkey: o Face ID abre sozinho ao entrar no app.
+  // Se o navegador exigir um toque antes (o iPhone às vezes exige), a
+  // tentativa falha calada e o botão continua ali.
+  const [passkeyAqui] = useState(aparelhoTemPasskey);
+  const [podePasskey] = useState(suportaPasskey);
+  const [entrandoPasskey, setEntrandoPasskey] = useState(false);
+  const tentouSozinho = useRef(false);
+
+  const entrarPasskey = async () => {
+    setErro("");
+    setEntrandoPasskey(true);
+    try {
+      await entrarComPasskey();
+      navigate("/app", { replace: true });
+    } catch (e) {
+      if (e instanceof ApiError) {
+        if (e.status === 404) marcarAparelho(false);
+        setErro(e.message);
+      } else {
+        const texto = textoDoErro(e);
+        if (texto) setErro(texto);
+      }
+    } finally {
+      setEntrandoPasskey(false);
+    }
+  };
+
   useEffect(() => {
     (async () => {
-      if (await sessaoValida()) navigate("/app", { replace: true });
-      else limparToken();
+      if (await sessaoValida()) {
+        navigate("/app", { replace: true });
+        return;
+      }
+      limparToken();
+      if (passkeyAqui && !tentouSozinho.current) {
+        tentouSozinho.current = true;
+        entrarPasskey();
+      }
     })();
+    // entrarPasskey e passkeyAqui não mudam depois da montagem.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [navigate]);
 
   useEffect(() => {
@@ -156,6 +198,15 @@ export default function Login() {
 
               {erro && <ErroBox texto={erro} />}
 
+              {podePasskey && passkeyAqui && (
+                <>
+                  <BotaoPasskey ocupado={entrandoPasskey} onClick={entrarPasskey} principal />
+                  <div className="fin-login__ou">
+                    <span>ou com e-mail e senha</span>
+                  </div>
+                </>
+              )}
+
               <form className="fin-login__form" onSubmit={handleEntrar}>
                 <div className="fin-field">
                   <label htmlFor="email">E-mail</label>
@@ -207,6 +258,17 @@ export default function Login() {
                   )}
                 </button>
               </form>
+
+              {/* Sem marca local a passkey ainda pode existir: sincronizada
+                  pelo iCloud ou pelo Google a partir de outro aparelho. */}
+              {podePasskey && !passkeyAqui && (
+                <>
+                  <div className="fin-login__ou">
+                    <span>ou</span>
+                  </div>
+                  <BotaoPasskey ocupado={entrandoPasskey} onClick={entrarPasskey} />
+                </>
+              )}
             </>
           )}
 
@@ -333,61 +395,24 @@ export default function Login() {
   );
 }
 
-// Cadastro do autenticador no mesmo aparelho. O link otpauth:// abre o app
-// autenticador instalado (no iPhone, também as Senhas do sistema). Se nada
-// abrir, a chave vai à mão em "inserir chave de configuração".
-function CadastroNoCelular({ uri }) {
-  const [copiada, setCopiada] = useState(false);
-
-  let chave = "";
-  try {
-    chave = new URL(uri).searchParams.get("secret") || "";
-  } catch {
-    chave = "";
-  }
-  // Em grupos de 4, como os apps mostram: menos chance de pular letra.
-  const chaveLegivel = chave.replace(/(.{4})/g, "$1 ").trim();
-
-  const copiar = async () => {
-    try {
-      await navigator.clipboard.writeText(chave);
-      setCopiada(true);
-      setTimeout(() => setCopiada(false), 2500);
-    } catch {
-      // Sem permissão de área de transferência: a chave segue na tela,
-      // selecionável, para copiar à mão.
-    }
-  };
-
+function BotaoPasskey({ ocupado, onClick, principal = false }) {
   return (
-    <div className="fin-setup2fa__celular">
-      <span className="fin-setup2fa__rotulo">Neste aparelho:</span>
-      <a href={uri} className="fin-btn fin-btn--primary fin-btn--block">
-        <ExternalLink size={14} /> Abrir no app autenticador
-      </a>
-      {chave && (
-        <div className="fin-setup2fa__chave">
-          <span className="fin-setup2fa__rotulo">
-            Não abriu? No app, escolha inserir chave de configuração e use:
-          </span>
-          <div className="fin-setup2fa__chave-linha">
-            <code className="fin-num">{chaveLegivel}</code>
-            <button
-              type="button"
-              className="fin-icon-btn"
-              onClick={copiar}
-              aria-label="Copiar a chave"
-              title="Copiar"
-            >
-              {copiada ? <Check size={14} /> : <Copy size={14} />}
-            </button>
-          </div>
-        </div>
+    <button
+      type="button"
+      className={`fin-btn fin-btn--${principal ? "primary" : "ghost"} fin-btn--block`}
+      onClick={onClick}
+      disabled={ocupado}
+    >
+      {ocupado ? (
+        <>
+          <Loader2 size={14} className="fin-spin" /> Esperando o aparelho...
+        </>
+      ) : (
+        <>
+          <Fingerprint size={15} /> Entrar com Face ID ou digital
+        </>
       )}
-      <span className="fin-field__hint">
-        Depois volte para cá e digite o código de 6 dígitos.
-      </span>
-    </div>
+    </button>
   );
 }
 

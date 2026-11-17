@@ -28,4 +28,9 @@ os.environ["TZ"] = os.getenv("FIN_FUSO_POSIX", "<-03>3")
 time.tzset()
 os.environ.setdefault("FIN_DB_FUSO", "-03:00")
 
+# Domínio das passkeys. Fixo de propósito, e não lido do cabeçalho Host:
+# a origem esperada é o que impede um site falso de usar a passkey.
+os.environ.setdefault("FIN_WEBAUTHN_RP_ID", "meulastro.vercel.app")
+os.environ.setdefault("FIN_WEBAUTHN_ORIGENS", "https://meulastro.vercel.app")
+
 from app import app  # noqa: E402,F401

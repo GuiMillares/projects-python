@@ -13,3 +13,7 @@ cryptography==50.0.0
 # SDK oficial do Google Gemini, usado só em api/ia.py para quebrar metas
 # em subtarefas. A chave vem da variável de ambiente GEMINI_API_KEY.
 google-genai==2.18.1
+
+# Passkeys (Face ID / digital) em api/passkeys.py: confere as assinaturas
+# WebAuthn. Traz cbor2, pyOpenSSL e pyasn1 junto.
+webauthn==3.0.1

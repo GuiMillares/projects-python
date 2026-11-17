@@ -2,7 +2,8 @@
 // como no painel do Synchro. Só o meu perfil, minha segurança e os tetos de
 // gasto que alimentam os alertas do dashboard.
 //
-// O tema não mora aqui: troca pelo botão da topbar.
+// Aparência: o botão da topbar troca na hora; aqui fica a opção de seguir
+// o tema do aparelho, que o botão sozinho não oferece.
 
 import {
   Camera,
@@ -13,7 +14,11 @@ import {
   FileText,
   KeyRound,
   Loader2,
+  Monitor,
+  Moon,
+  Palette,
   ShieldCheck,
+  Sun,
   Tags,
   Target,
   Trash2,
@@ -25,6 +30,9 @@ import QRCode from "qrcode";
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import ApagarConta from "../components/ApagarConta";
+import CadastroNoCelular from "../components/CadastroNoCelular";
+import PasskeysCard from "../components/PasskeysCard";
+import { useTheme } from "../context/ThemeProvider";
 import { usePerfil } from "../context/PerfilProvider";
 import { desativar2FA, iniciarSetup2FA, verificar2FA } from "../services/authService";
 import {
@@ -76,7 +84,9 @@ export default function Configuracoes() {
 
   // 2FA
   const [qrDataUrl, setQrDataUrl] = useState("");
-  const [modo2fa, setModo2fa] = useState("idle"); // idle | setup | desativar
+  const [otpauth, setOtpauth] = useState("");
+  const [modo2fa, setModo2fa] = useState("idle"); // idle | setup | trocar | desativar
+  const { modo: modoTema, setModo: setModoTema } = useTheme();
   const [codigo, setCodigo] = useState("");
   const [salvando2fa, setSalvando2fa] = useState(false);
 
@@ -233,6 +243,7 @@ export default function Configuracoes() {
     setCodigo("");
     try {
       const uri = await iniciarSetup2FA();
+      setOtpauth(uri);
       setQrDataUrl(await QRCode.toDataURL(uri, { margin: 0, width: 320 }));
       setModo2fa("setup");
     } catch (err) {
@@ -250,6 +261,24 @@ export default function Configuracoes() {
       setQrDataUrl("");
       setCodigo("");
       avisar("Verificação em duas etapas ativada.");
+    } catch (err) {
+      avisar(err.message, "error");
+    } finally {
+      setSalvando2fa(false);
+    }
+  };
+
+  // Trocar de celular: o servidor não troca o segredo de quem já tem 2FA
+  // ativo (senão uma sessão aberta, ou só a senha, bastaria para pôr outro
+  // autenticador). Então a troca é desativar com um código do autenticador
+  // atual e cadastrar o novo em seguida.
+  const confirmarTroca = async (e) => {
+    e.preventDefault();
+    setSalvando2fa(true);
+    try {
+      await desativar2FA(codigo);
+      atualizar({ twoFactorEnrolled: false });
+      await abrirSetup();
     } catch (err) {
       avisar(err.message, "error");
     } finally {
@@ -433,11 +462,37 @@ export default function Configuracoes() {
             </div>
             </form>
           </section>
-        </div>
 
-        {/* Não há card de aparência: o tema se troca pelo botão da topbar,
-            que está sempre à mão. Duplicar o controle aqui só criaria dois
-            lugares para fazer a mesma coisa. */}
+          {/* Aparência: o botão da topbar troca na hora, mas só aqui dá
+              para voltar a seguir o tema do aparelho. */}
+          <section className="fin-card">
+            <div className="fin-cfg-card__title">
+              <Palette size={15} /> Aparência
+            </div>
+            <div className="fin-seg" role="radiogroup" aria-label="Tema">
+              {[
+                ["aparelho", Monitor, "Do aparelho"],
+                ["claro", Sun, "Claro"],
+                ["escuro", Moon, "Escuro"],
+              ].map(([valor, Icone, rotulo]) => (
+                <button
+                  key={valor}
+                  role="radio"
+                  aria-checked={modoTema === valor}
+                  className={modoTema === valor ? "active" : ""}
+                  onClick={() => setModoTema(valor)}
+                >
+                  <Icone size={13} /> {rotulo}
+                </button>
+              ))}
+            </div>
+            <p className="fin-field__hint" style={{ marginTop: 10 }}>
+              {modoTema === "aparelho"
+                ? "Segue o tema do celular ou do computador, e muda junto quando ele troca."
+                : "Fixo, não importa o tema do aparelho."}
+            </p>
+          </section>
+        </div>
 
         {/* ── Coluna 2: segurança ── */}
         <div className="fin-cfg-col">
@@ -530,7 +585,7 @@ export default function Configuracoes() {
 
                 <p className="fin-field__hint">
                   {dosDoisFa
-                    ? "Um código do autenticador é pedido toda vez que você abre o painel. Trocou de celular? Reconfigure: o código antigo para de valer na hora."
+                    ? "Um código do autenticador é pedido a cada login com senha. Vai trocar de celular? Faça antes de apagar o antigo: a troca pede um código dele."
                     : "Sem ela, quem souber sua senha entra no painel. Vale o minuto que leva para configurar."}
                 </p>
 
@@ -538,9 +593,13 @@ export default function Configuracoes() {
                   <button
                     type="button"
                     className={`fin-btn fin-btn--sm ${dosDoisFa ? "fin-btn--outline" : "fin-btn--primary"}`}
-                    onClick={abrirSetup}
+                    onClick={() => {
+                      if (!dosDoisFa) return abrirSetup();
+                      setCodigo("");
+                      setModo2fa("trocar");
+                    }}
                   >
-                    <ShieldCheck size={13} /> {dosDoisFa ? "Reconfigurar" : "Ativar agora"}
+                    <ShieldCheck size={13} /> {dosDoisFa ? "Trocar de celular" : "Ativar agora"}
                   </button>
 
                   {dosDoisFa && (
@@ -562,9 +621,17 @@ export default function Configuracoes() {
             {modo2fa === "setup" && (
               <form className="fin-form" onSubmit={confirmarSetup}>
                 <p className="fin-field__hint">
-                  Leia o QR code no seu autenticador e digite o código gerado para confirmar.
+                  Cadastre o Lastro no autenticador e digite o código gerado para confirmar.
                 </p>
-                {qrDataUrl && <img src={qrDataUrl} alt="QR code do autenticador" className="fin-qr" />}
+                <div className="fin-setup2fa">
+                  {qrDataUrl && (
+                    <div className="fin-setup2fa__qr">
+                      <span className="fin-setup2fa__rotulo">Em outro aparelho, leia o QR code:</span>
+                      <img src={qrDataUrl} alt="QR code do autenticador" className="fin-qr" />
+                    </div>
+                  )}
+                  {otpauth && <CadastroNoCelular uri={otpauth} />}
+                </div>
                 <CampoCodigo valor={codigo} onChange={setCodigo} />
                 <AcoesCodigo
                   salvando={salvando2fa}
@@ -573,6 +640,26 @@ export default function Configuracoes() {
                   onCancelar={() => {
                     setModo2fa("idle");
                     setQrDataUrl("");
+                    setOtpauth("");
+                    setCodigo("");
+                  }}
+                />
+              </form>
+            )}
+
+            {modo2fa === "trocar" && (
+              <form className="fin-form" onSubmit={confirmarTroca}>
+                <p className="fin-field__hint">
+                  Digite um código do autenticador ATUAL. Em seguida aparece o cadastro do novo. Se
+                  parar no meio, a verificação fica desligada até você ativar de novo.
+                </p>
+                <CampoCodigo valor={codigo} onChange={setCodigo} />
+                <AcoesCodigo
+                  salvando={salvando2fa}
+                  codigo={codigo}
+                  rotulo="Continuar"
+                  onCancelar={() => {
+                    setModo2fa("idle");
                     setCodigo("");
                   }}
                 />
@@ -602,6 +689,8 @@ export default function Configuracoes() {
                 </form>
               )}
           </section>
+
+          <PasskeysCard avisar={avisar} />
         </div>
 
         {/* ── Orçamentos: linha inteira, é uma tabela ── */}

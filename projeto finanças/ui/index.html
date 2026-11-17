@@ -5,6 +5,18 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>Lastro</title>
 
+    <!-- Tema antes da primeira pintura, senão um celular no claro vê o app
+         piscar escuro até o React carregar. Mesma regra do ThemeProvider. -->
+    <script>
+      (function () {
+        var m = "aparelho";
+        try { m = localStorage.getItem("fin_tema_modo") || "aparelho"; } catch (e) {}
+        var claro = m === "claro" || (m !== "escuro" &&
+          window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches);
+        document.documentElement.setAttribute("data-theme", claro ? "light" : "dark");
+      })();
+    </script>
+
     <!-- App instalável (PWA): abre em tela cheia, sem a barra de endereço.
          As cores daqui e do manifest são a exceção à regra dos tokens: o
          navegador lê antes de qualquer CSS. O ThemeProvider troca o

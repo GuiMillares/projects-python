@@ -73,6 +73,21 @@ BLOQUEIO_MINUTOS = 15
 
 EMISSOR_TOTP = os.getenv("FIN_TOTP_EMISSOR", "Lastro")
 
+# ── Passkeys (WebAuthn, api/passkeys.py) ─────────────────────
+# A passkey fica presa a este domínio: trocar o RP_ID invalida todas as
+# já cadastradas. Na Vercel o api/index.py preenche com meulastro.vercel.app.
+# No PC, localhost (o WebAuthn aceita localhost sem HTTPS).
+WEBAUTHN_RP_ID = os.getenv("FIN_WEBAUTHN_RP_ID", "localhost")
+WEBAUTHN_RP_NOME = os.getenv("FIN_WEBAUTHN_RP_NOME", "Lastro")
+# Origens de onde a cerimônia pode vir (lista separada por vírgula).
+WEBAUTHN_ORIGENS = [
+    o.strip()
+    for o in os.getenv(
+        "FIN_WEBAUTHN_ORIGENS", "http://localhost:1420,http://localhost:4173"
+    ).split(",")
+    if o.strip()
+]
+
 # ── LGPD ─────────────────────────────────────────────────────
 # Quem responde pelos dados desta instalação (o controlador) e como falar
 # com essa pessoa. Aparecem na política de privacidade. Ficam no .env, e
