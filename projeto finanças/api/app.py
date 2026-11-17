@@ -218,34 +218,83 @@ def convite_ver(token):
         return _erro_espaco(e)
 
 
-@app.post("/api/convites/<token>/cadastro")
-def convite_cadastro(token):
-    """Cria a conta por um convite. Não existe cadastro aberto: sem link
-    válido, não há conta nova. A conta e a captura do convite acontecem na
-    mesma transação. A sessão nasce parcial, como num login com senha: o
-    próximo passo é cadastrar o 2FA."""
-    d = request.get_json(silent=True) or {}
+# Conta que nunca terminou o cadastro (sem 2FA confirmado) depois deste
+# prazo não segura o e-mail: alguém que digitou o e-mail de outra pessoa
+# não impede a dona dele de se cadastrar. A rotina diária apaga as mais
+# velhas que CADASTRO_ABANDONADO_DIAS.
+CADASTRO_PRESO_HORAS = 24
+CADASTRO_ABANDONADO_DIAS = 7
+
+
+class _CadastroRecusado(Exception):
+    def __init__(self, msg, status=400):
+        super().__init__(msg)
+        self.status = status
+
+
+def _criar_usuario(cur, d, ja_existe):
+    """Valida e grava a conta nova dentro da transação `cur`. Devolve o id.
+
+    O 2FA fica para o próximo passo (sessão parcial), como num login."""
     email = str(d.get("email") or "").strip().lower()
     nome = str(d.get("nome") or "").strip()[:120]
     senha = str(d.get("senha") or "")
     if len(email) > 190 or not _EMAIL.match(email):
-        return erro("Confira o e-mail.")
+        raise _CadastroRecusado("Confira o e-mail.")
     if not 8 <= len(senha) <= 200:
-        return erro("A senha precisa ter pelo menos 8 caracteres.")
+        raise _CadastroRecusado("A senha precisa ter pelo menos 8 caracteres.")
 
+    cur.execute(
+        "SELECT id, totp_confirmado, criado_em < NOW() - INTERVAL %s HOUR AS presa "
+        "FROM usuarios WHERE email = %s FOR UPDATE",
+        (CADASTRO_PRESO_HORAS, email),
+    )
+    antiga = cur.fetchone()
+    if antiga and (antiga["totp_confirmado"] or not antiga["presa"]):
+        raise _CadastroRecusado(ja_existe, 409)
+    if antiga:
+        cur.execute("DELETE FROM usuarios WHERE id = %s", (antiga["id"],))
+
+    cur.execute(
+        "INSERT INTO usuarios (email, senha_hash, nome) VALUES (%s, %s, %s)",
+        (email, seguranca.hash_senha(senha), nome),
+    )
+    return cur.lastrowid
+
+
+@app.post("/api/auth/cadastro")
+def cadastro():
+    """Cadastro aberto: qualquer pessoa cria a própria conta. Cada uma traz
+    a própria credencial da Pluggy, então conta nova não custa nada a quem
+    mantém o app; o teto por hora segura robô enchendo o banco."""
+    d = request.get_json(silent=True) or {}
+    recentes = buscar_um(
+        "SELECT COUNT(*) AS n FROM usuarios WHERE criado_em > NOW() - INTERVAL 1 HOUR"
+    )["n"]
+    if recentes >= config.CADASTROS_POR_HORA:
+        return erro("Muitos cadastros agora. Tente de novo em uma hora.", 429)
     try:
         with cursor(commit=True) as cur:
-            cur.execute("SELECT id FROM usuarios WHERE email = %s", (email,))
-            if cur.fetchone():
-                return erro(
-                    "Já existe uma conta com esse e-mail. Entre com ela e abra o link de novo.", 409
-                )
-            cur.execute(
-                "INSERT INTO usuarios (email, senha_hash, nome) VALUES (%s, %s, %s)",
-                (email, seguranca.hash_senha(senha), nome),
+            uid = _criar_usuario(cur, d, "Já existe uma conta com esse e-mail. Entre com ela.")
+    except _CadastroRecusado as e:
+        return erro(str(e), e.status)
+    token_sessao = seguranca.criar_sessao(uid, dois_fatores_ok=False)
+    return jsonify({"token": token_sessao, "etapa": "setup2fa"}), 201
+
+
+@app.post("/api/convites/<token>/cadastro")
+def convite_cadastro(token):
+    """Cria a conta por um convite. A conta e a captura do convite
+    acontecem na mesma transação: link inválido, conta nenhuma."""
+    d = request.get_json(silent=True) or {}
+    try:
+        with cursor(commit=True) as cur:
+            uid = _criar_usuario(
+                cur, d, "Já existe uma conta com esse e-mail. Entre com ela e abra o link de novo."
             )
-            uid = cur.lastrowid
             espacos.pegar_convite(cur, token, uid)
+    except _CadastroRecusado as e:
+        return erro(str(e), e.status)
     except espacos.EspacoErro as e:
         return _erro_espaco(e)
 
@@ -495,6 +544,15 @@ def cron_diario():
             resumo["faturas"] += notificacoes.avisar_faturas(uid, cartoes, hoje)
         except Exception:  # noqa: BLE001
             app.logger.exception("rotina diária falhou para uma pessoa")
+
+    # Cadastro que nunca chegou ao 2FA: a conta não tem dado nenhum, só
+    # segura um e-mail. Ver CADASTRO_ABANDONADO_DIAS.
+    with cursor(commit=True) as cur:
+        cur.execute(
+            "DELETE FROM usuarios WHERE totp_confirmado = 0 AND criado_em < NOW() - INTERVAL %s DAY",
+            (CADASTRO_ABANDONADO_DIAS,),
+        )
+        resumo["cadastrosAbandonados"] = cur.rowcount
     return jsonify({"ok": True, **resumo})
 
 
@@ -953,14 +1011,43 @@ def apagar_transacao(transacao_id):
 
 
 # ── Orçamentos ───────────────────────────────────────────────
+# Cada pessoa tem os seus tetos (orcamentos). O espaço tem os da casa
+# (orcamentos_espaco), que valem na visão Juntos e que qualquer membro
+# edita. Na visão de outro membro, os tetos dele, só para ler.
+def _tetos(linhas):
+    return {l["categoria"]: float(l["teto"]) for l in linhas}
+
+
 @app.get("/api/orcamentos")
 @exige_sessao()
 def listar_orcamentos():
-    linhas = buscar_todos(
-        "SELECT categoria, teto FROM orcamentos WHERE usuario_id = %s",
-        (g.sessao["usuario_id"],),
-    )
-    return jsonify({l["categoria"]: float(l["teto"]) for l in linhas})
+    eu = g.sessao["usuario_id"]
+    v = request.args.get("visao")
+    try:
+        ids = visao.ids_da_visao(eu, v)
+    except visao.VisaoInvalida as e:
+        return erro(str(e), 404)
+
+    if v == "juntos" and len(ids) > 1:
+        meu = espacos.espaco_de(eu)
+        da_casa = _tetos(buscar_todos(
+            "SELECT categoria, teto FROM orcamentos_espaco WHERE espaco_id = %s", (meu["id"],)
+        ))
+        if da_casa:
+            return jsonify(da_casa)
+        # A casa ainda não definiu os dela: vale a soma dos tetos de cada um,
+        # que é o que o gasto somado do Juntos tem de respeitar.
+        marcadores = ", ".join(["%s"] * len(ids))
+        soma = {}
+        for l in buscar_todos(
+            f"SELECT categoria, teto FROM orcamentos WHERE usuario_id IN ({marcadores})", tuple(ids)
+        ):
+            soma[l["categoria"]] = soma.get(l["categoria"], 0) + float(l["teto"])
+        return jsonify(soma)
+
+    return jsonify(_tetos(buscar_todos(
+        "SELECT categoria, teto FROM orcamentos WHERE usuario_id = %s", (ids[0],)
+    )))
 
 
 @app.put("/api/orcamentos")
@@ -970,27 +1057,36 @@ def salvar_orcamentos():
 
     A tela manda todas as categorias de uma vez, então tratar como
     substituição evita teto órfão de categoria que deixou de existir.
+    ?visao=juntos grava os tetos do espaço; sem isso, os da pessoa.
     """
     enviados = request.get_json(silent=True) or {}
     if not isinstance(enviados, dict):
         return erro("Envie um objeto categoria → teto.")
 
     validos = {}
-    for categoria, teto in enviados.items():
+    for categoria, teto in list(enviados.items())[:200]:
         try:
             v = Decimal(str(teto))
         except Exception:
             continue
-        if v > 0:
+        if 0 < v < Decimal("10000000000"):
             validos[str(categoria)[:80]] = v
 
     uid = g.sessao["usuario_id"]
+    if request.args.get("visao") == "juntos":
+        meu = espacos.espaco_de(uid)
+        if not meu:
+            return erro("Você não está num espaço compartilhado.", 404)
+        tabela, chave, dono = "orcamentos_espaco", "espaco_id", meu["id"]
+    else:
+        tabela, chave, dono = "orcamentos", "usuario_id", uid
+
     with cursor(commit=True) as cur:
-        cur.execute("DELETE FROM orcamentos WHERE usuario_id = %s", (uid,))
+        cur.execute(f"DELETE FROM {tabela} WHERE {chave} = %s", (dono,))
         if validos:
             cur.executemany(
-                "INSERT INTO orcamentos (usuario_id, categoria, teto) VALUES (%s, %s, %s)",
-                [(uid, c, t) for c, t in validos.items()],
+                f"INSERT INTO {tabela} ({chave}, categoria, teto) VALUES (%s, %s, %s)",
+                [(dono, c, t) for c, t in validos.items()],
             )
     return jsonify({c: float(t) for c, t in validos.items()})
 
@@ -1020,10 +1116,19 @@ def listar_investimentos():
     item e `aviso` explica o motivo, mas a lista sai completa do mesmo
     jeito. A tela nunca fica sem os dados que estão no banco.
     """
+    eu = g.sessao["usuario_id"]
+    try:
+        ids = visao.ids_da_visao(eu, request.args.get("visao"))
+    except visao.VisaoInvalida as e:
+        return erro(str(e), 404)
+    nomes = {m["id"]: m["nome"] for m in visao.membros(eu)} if len(ids) > 1 or ids[0] != eu else {}
+    # As suas, todas; as dos outros membros, só as sem cadeado.
+    marcadores = ", ".join(["%s"] * len(ids))
     linhas = buscar_todos(
-        "SELECT id, ticker, quantidade, preco_medio, data FROM investimentos "
-        "WHERE usuario_id = %s ORDER BY ticker, data",
-        (g.sessao["usuario_id"],),
+        "SELECT id, usuario_id, ticker, quantidade, preco_medio, data, privada FROM investimentos "
+        f"WHERE usuario_id IN ({marcadores}) AND (usuario_id = %s OR privada = 0) "
+        "ORDER BY ticker, data",
+        (*ids, eu),
     )
 
     precos, aviso = cotacoes.buscar(l["ticker"] for l in linhas)
@@ -1040,6 +1145,9 @@ def listar_investimentos():
             "investido": round(quantidade * preco_medio, 2),
             "data": l["data"].isoformat() if isinstance(l["data"], date) else str(l["data"]),
             "cotacao": precos.get(l["ticker"]),
+            "minha": l["usuario_id"] == eu,
+            "dono": nomes.get(l["usuario_id"]) if l["usuario_id"] != eu else None,
+            "privada": bool(l["privada"]),
         })
 
     return jsonify({"itens": itens, "aviso": aviso, "temToken": bool(config.BRAPI_TOKEN)})
@@ -1077,6 +1185,26 @@ def criar_investimento():
     return jsonify({"ok": True, "id": novo_id}), 201
 
 
+@app.patch("/api/investimentos/<int:investimento_id>")
+@exige_sessao()
+def cadeado_investimento(investimento_id):
+    """Liga ou desliga o cadeado da posição. Só quem é dona mexe."""
+    privada = (request.get_json(silent=True) or {}).get("privada")
+    if not isinstance(privada, bool):
+        return erro("Envie privada: true ou false.")
+    with cursor(commit=True) as cur:
+        cur.execute(
+            "UPDATE investimentos SET privada = %s WHERE id = %s AND usuario_id = %s",
+            (int(privada), investimento_id, g.sessao["usuario_id"]),
+        )
+        if cur.rowcount == 0 and not buscar_um(
+            "SELECT id FROM investimentos WHERE id = %s AND usuario_id = %s",
+            (investimento_id, g.sessao["usuario_id"]),
+        ):
+            return erro("Investimento não encontrado.", 404)
+    return jsonify({"ok": True, "privada": privada})
+
+
 @app.delete("/api/investimentos/<int:investimento_id>")
 @exige_sessao()
 def apagar_investimento(investimento_id):
@@ -1091,22 +1219,40 @@ def apagar_investimento(investimento_id):
 
 
 # ── Metas e subtarefas ───────────────────────────────────────
+def _acesso_meta(usuario_id, alias="metas"):
+    """WHERE de quem pode mexer numa meta: a dona, ou qualquer membro do
+    espaço quando a meta é do espaço. O espaço vem do banco a cada
+    chamada: quem saiu perde o acesso na hora."""
+    meu = espacos.espaco_de(usuario_id)
+    return (
+        f"({alias}.usuario_id = %s OR ({alias}.espaco_id IS NOT NULL AND {alias}.espaco_id = %s))",
+        (usuario_id, meu["id"] if meu else 0),
+    )
+
+
 def _carregar_metas(usuario_id):
-    """Metas do usuário com as subtarefas embutidas.
+    """Metas da pessoa e as do espaço dela, com as subtarefas embutidas.
 
     Duas consultas em vez de um JOIN: o JOIN devolveria a meta repetida uma
     vez por subtarefa e a montagem em Python daria no mesmo trabalho.
     """
+    onde, params = _acesso_meta(usuario_id)
     metas = buscar_todos(
-        "SELECT id, titulo, descricao, alvo, guardado, prazo, concluida, "
+        "SELECT id, usuario_id, espaco_id, titulo, descricao, alvo, guardado, prazo, concluida, "
         "       concluida_em, multiplicador, criado_em "
-        "  FROM metas WHERE usuario_id = %s "
+        f"  FROM metas WHERE {onde} "
         " ORDER BY concluida, COALESCE(prazo, '9999-12-31'), id",
-        (usuario_id,),
+        params,
     )
     if not metas:
         return []
     renda = _renda_mensal(usuario_id)
+    nomes = {}
+    renda_casa = None
+    if any(m["espaco_id"] for m in metas):
+        membros = visao.membros(usuario_id)
+        nomes = {m["id"]: m["nome"] for m in membros}
+        renda_casa = _renda_mensal([m["id"] for m in membros])
 
     ids = [m["id"] for m in metas]
     marcadores = ",".join(["%s"] * len(ids))
@@ -1124,7 +1270,7 @@ def _carregar_metas(usuario_id):
     hoje = date.today()
     saida = []
     for m in metas:
-        dif = _dificuldade_da_meta(m, renda)
+        dif = _dificuldade_da_meta(m, renda_casa if m["espaco_id"] else renda)
         mult = dif["multiplicador"]
         prazo = m["prazo"]
         # Concluída: pontual se fechou até o prazo. Aberta: o bônus mostrado
@@ -1144,6 +1290,9 @@ def _carregar_metas(usuario_id):
             "guardado": float(m["guardado"]),
             "prazo": prazo.isoformat() if isinstance(prazo, date) else prazo,
             "concluida": bool(m["concluida"]),
+            "doEspaco": bool(m["espaco_id"]),
+            "minha": m["usuario_id"] == usuario_id,
+            "criadaPor": nomes.get(m["usuario_id"]) if m["usuario_id"] != usuario_id else None,
             "dificuldade": dif,
             "pontual": pontual,
             # `xp` já vem com a dificuldade: a tela soma direto. `xpBase` é
@@ -1166,17 +1315,21 @@ def _renda_mensal(usuario_id):
     """Média das entradas nos últimos 3 meses fechados, só dos meses em que
     o app foi usado (com algum lançamento). Dividir por 3 sempre puniria
     quem começou a usar há um mês. Sem nada registrado, devolve None e a
-    dificuldade cai na escala em reais."""
+    dificuldade cai na escala em reais. Uma lista de ids soma a casa (meta
+    do espaço): conta só o que não tem cadeado, como na visão Juntos."""
+    ids = usuario_id if isinstance(usuario_id, list) else [usuario_id]
     hoje = date.today()
     fim = hoje.replace(day=1)
     inicio = fim
     for _ in range(3):
         inicio = (inicio - timedelta(days=1)).replace(day=1)
 
+    marcadores = ", ".join(["%s"] * len(ids))
+    privado = " AND privada = 0" if len(ids) > 1 else ""
     linhas = buscar_todos(
         "SELECT data, natureza, valor FROM transacoes "
-        "WHERE usuario_id = %s AND ignorada = 0 AND data >= %s AND data < %s",
-        (usuario_id, inicio, fim),
+        f"WHERE usuario_id IN ({marcadores}) AND ignorada = 0 AND data >= %s AND data < %s{privado}",
+        (*ids, inicio, fim),
     )
     meses = {(l["data"].year, l["data"].month) for l in linhas}
     entradas = sum(float(l["valor"]) for l in linhas if l["natureza"] == "receita")
@@ -1194,11 +1347,12 @@ def _dificuldade_da_meta(m, renda):
 
 
 def _meta_do_usuario(meta_id, usuario_id):
-    """Confere posse. O usuario_id no WHERE é o que impede um id chutado
-    de alcançar meta de outra conta."""
+    """Confere acesso (ver _acesso_meta). É o que impede um id chutado de
+    alcançar meta de outra conta."""
+    onde, params = _acesso_meta(usuario_id)
     return buscar_um(
-        "SELECT id FROM metas WHERE id = %s AND usuario_id = %s",
-        (meta_id, usuario_id),
+        f"SELECT id, usuario_id, espaco_id, alvo, prazo, criado_em FROM metas WHERE id = %s AND {onde}",
+        (meta_id, *params),
     )
 
 
@@ -1238,11 +1392,18 @@ def criar_meta():
         if alvo <= 0:
             return erro("O valor alvo precisa ser maior que zero.")
 
+    espaco_id = None
+    if d.get("doEspaco"):
+        meu = espacos.espaco_de(g.sessao["usuario_id"])
+        if not meu:
+            return erro("Você não está num espaço compartilhado.", 404)
+        espaco_id = meu["id"]
+
     with cursor(commit=True) as cur:
         cur.execute(
-            "INSERT INTO metas (usuario_id, titulo, descricao, alvo, prazo) "
-            "VALUES (%s, %s, %s, %s, %s)",
-            (g.sessao["usuario_id"], titulo, descricao, alvo, d.get("prazo") or None),
+            "INSERT INTO metas (usuario_id, titulo, descricao, alvo, prazo, espaco_id) "
+            "VALUES (%s, %s, %s, %s, %s, %s)",
+            (g.sessao["usuario_id"], titulo, descricao, alvo, d.get("prazo") or None, espaco_id),
         )
         meta_id = cur.lastrowid
 
@@ -1324,21 +1485,21 @@ def alternar_subtarefa(subtarefa_id):
 
     # O JOIN em metas é a checagem de posse: subtarefas não guardam
     # usuario_id, a dona é a meta.
+    onde, params = _acesso_meta(g.sessao["usuario_id"], "m")
     with cursor(commit=True) as cur:
         cur.execute(
             "UPDATE subtarefas s JOIN metas m ON m.id = s.meta_id "
             "   SET s.concluida = %s, s.concluida_em = %s "
-            " WHERE s.id = %s AND m.usuario_id = %s",
-            (int(concluida), datetime.now() if concluida else None,
-             subtarefa_id, g.sessao["usuario_id"]),
+            f" WHERE s.id = %s AND {onde}",
+            (int(concluida), datetime.now() if concluida else None, subtarefa_id, *params),
         )
         if cur.rowcount == 0:
             # rowcount 0 também acontece quando o valor já era esse; conferir
             # a existência separa "não é sua" de "não mudou nada".
             existe = buscar_um(
                 "SELECT s.id FROM subtarefas s JOIN metas m ON m.id = s.meta_id "
-                " WHERE s.id = %s AND m.usuario_id = %s",
-                (subtarefa_id, g.sessao["usuario_id"]),
+                f" WHERE s.id = %s AND {onde}",
+                (subtarefa_id, *params),
             )
             if not existe:
                 return erro("Subtarefa não encontrada.", 404)
@@ -1355,11 +1516,12 @@ def alternar_subtarefa(subtarefa_id):
 @app.delete("/api/subtarefas/<int:subtarefa_id>")
 @exige_sessao()
 def apagar_subtarefa(subtarefa_id):
+    onde, params = _acesso_meta(g.sessao["usuario_id"], "m")
     with cursor(commit=True) as cur:
         cur.execute(
             "DELETE s FROM subtarefas s JOIN metas m ON m.id = s.meta_id "
-            " WHERE s.id = %s AND m.usuario_id = %s",
-            (subtarefa_id, g.sessao["usuario_id"]),
+            f" WHERE s.id = %s AND {onde}",
+            (subtarefa_id, *params),
         )
         if cur.rowcount == 0:
             return erro("Subtarefa não encontrada.", 404)
@@ -1369,8 +1531,10 @@ def apagar_subtarefa(subtarefa_id):
 @app.patch("/api/metas/<int:meta_id>")
 @exige_sessao()
 def atualizar_meta(meta_id):
-    """Conclui/reabre a meta ou atualiza quanto já foi guardado."""
-    if not _meta_do_usuario(meta_id, g.sessao["usuario_id"]):
+    """Conclui/reabre a meta, atualiza quanto já foi guardado ou (só quem
+    criou) leva a meta para o espaço e de volta."""
+    meta = _meta_do_usuario(meta_id, g.sessao["usuario_id"])
+    if not meta:
         return erro("Meta não encontrada.", 404)
 
     d = request.get_json(silent=True) or {}
@@ -1382,11 +1546,12 @@ def atualizar_meta(meta_id):
         # ser calculado pela renda do momento.
         multiplicador = None
         if concluida:
-            m = buscar_um(
-                "SELECT alvo, prazo, criado_em FROM metas WHERE id = %s", (meta_id,)
+            renda = _renda_mensal(
+                [m["id"] for m in visao.membros(g.sessao["usuario_id"])]
+                if meta["espaco_id"] else g.sessao["usuario_id"]
             )
             multiplicador = gamificacao.dificuldade(
-                m["alvo"], m["prazo"], m["criado_em"], _renda_mensal(g.sessao["usuario_id"])
+                meta["alvo"], meta["prazo"], meta["criado_em"], renda
             )["multiplicador"]
         campos += ["concluida = %s", "concluida_em = %s", "multiplicador = %s"]
         valores += [int(concluida), datetime.now() if concluida else None, multiplicador]
@@ -1401,14 +1566,23 @@ def atualizar_meta(meta_id):
         campos.append("guardado = %s")
         valores.append(guardado)
 
+    if "doEspaco" in d:
+        if meta["usuario_id"] != g.sessao["usuario_id"]:
+            return erro("Só quem criou a meta muda de quem ela é.", 403)
+        espaco_id = None
+        if d["doEspaco"]:
+            meu = espacos.espaco_de(g.sessao["usuario_id"])
+            if not meu:
+                return erro("Você não está num espaço compartilhado.", 404)
+            espaco_id = meu["id"]
+        campos.append("espaco_id = %s")
+        valores.append(espaco_id)
+
     if not campos:
         return erro("Nada para atualizar.")
 
     with cursor(commit=True) as cur:
-        cur.execute(
-            f"UPDATE metas SET {', '.join(campos)} WHERE id = %s AND usuario_id = %s",
-            (*valores, meta_id, g.sessao["usuario_id"]),
-        )
+        cur.execute(f"UPDATE metas SET {', '.join(campos)} WHERE id = %s", (*valores, meta_id))
 
     metas = _carregar_metas(g.sessao["usuario_id"])
     return jsonify({
@@ -1421,13 +1595,14 @@ def atualizar_meta(meta_id):
 @exige_sessao()
 def apagar_meta(meta_id):
     # As subtarefas somem junto pelo ON DELETE CASCADE da chave estrangeira.
+    # Meta do espaço: só quem criou apaga; os outros membros só mexem nela.
+    meta = _meta_do_usuario(meta_id, g.sessao["usuario_id"])
+    if not meta:
+        return erro("Meta não encontrada.", 404)
+    if meta["usuario_id"] != g.sessao["usuario_id"]:
+        return erro("Só quem criou a meta pode apagar.", 403)
     with cursor(commit=True) as cur:
-        cur.execute(
-            "DELETE FROM metas WHERE id = %s AND usuario_id = %s",
-            (meta_id, g.sessao["usuario_id"]),
-        )
-        if cur.rowcount == 0:
-            return erro("Meta não encontrada.", 404)
+        cur.execute("DELETE FROM metas WHERE id = %s", (meta_id,))
     return jsonify({"ok": True})
 
 
@@ -2198,6 +2373,7 @@ _TABELAS_ESPERADAS = (
     "aceites", "descartes", "passkeys", "desafios_webauthn",
     "espacos", "espaco_membros", "convites",
     "push_inscricoes", "notif_preferencias", "webhooks_pluggy", "notificacoes_enviadas",
+    "orcamentos_espaco",
 )
 # Colunas acrescentadas depois que o banco da nuvem já existia (as mesmas
 # de ops/atualizar_banco.py).
@@ -2205,6 +2381,8 @@ _COLUNAS_ESPERADAS = (
     ("transacoes", "conexao_id"),
     ("transacoes", "privada"),
     ("conexoes_bancarias", "privada"),
+    ("investimentos", "privada"),
+    ("metas", "espaco_id"),
 )
 
 

@@ -22,6 +22,10 @@ export async function entrar(email, senha) {
   return etapa;
 }
 
+/** Cadastro aberto. Devolve {token, etapa: "setup2fa"}: a sessão nasce
+ * parcial, como num login, e o próximo passo é o 2FA. */
+export const criarConta = (dados) => api.post("/api/auth/cadastro", dados);
+
 /** Pede um segredo novo ao servidor e recebe só o otpauth:// do QR. */
 export async function iniciarSetup2FA() {
   const { otpauthUri } = await api.post("/api/auth/2fa/setup");

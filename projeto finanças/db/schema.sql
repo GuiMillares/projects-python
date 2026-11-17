@@ -146,6 +146,8 @@ CREATE TABLE IF NOT EXISTS investimentos (
   quantidade  DECIMAL(18,8)   NOT NULL,
   preco_medio DECIMAL(18,8)   NOT NULL,
   data        DATE            NOT NULL,
+  -- Cadeado: a posição fica fora da visão dos outros membros do espaço.
+  privada     TINYINT(1)      NOT NULL DEFAULT 0,
   criado_em   DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
   KEY ix_investimentos_usuario (usuario_id, ticker),
@@ -175,9 +177,14 @@ CREATE TABLE IF NOT EXISTS metas (
   -- Multiplicador de dificuldade congelado na conclusão (gamificacao.py).
   -- NULL em meta aberta: aí ele é calculado na hora, pela renda atual.
   multiplicador DECIMAL(3,2)  NULL,
+  -- Meta do espaço: todo membro vê e mexe (guardado, passos, concluir).
+  -- NULL é meta pessoal. Sem chave estrangeira de propósito: quando o
+  -- espaço acaba, api/espacos.py devolve a meta para quem a criou.
+  espaco_id   INT UNSIGNED    NULL,
   criado_em   DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
   KEY ix_metas_usuario (usuario_id),
+  KEY ix_metas_espaco (espaco_id),
   CONSTRAINT fk_metas_usuario FOREIGN KEY (usuario_id)
     REFERENCES usuarios (id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -383,6 +390,18 @@ CREATE TABLE IF NOT EXISTS convites (
     REFERENCES usuarios (id) ON DELETE CASCADE,
   CONSTRAINT fk_convites_usado_por FOREIGN KEY (usado_por)
     REFERENCES usuarios (id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Orçamento do espaço: tetos da casa, comparados com o gasto somado na
+-- visão Juntos. Os tetos de cada um seguem em `orcamentos`. Qualquer
+-- membro edita; o espaço acabou, os tetos dele vão junto.
+CREATE TABLE IF NOT EXISTS orcamentos_espaco (
+  espaco_id  INT UNSIGNED  NOT NULL,
+  categoria  VARCHAR(80)   NOT NULL,
+  teto       DECIMAL(12,2) NOT NULL,
+  PRIMARY KEY (espaco_id, categoria),
+  CONSTRAINT fk_orc_espaco FOREIGN KEY (espaco_id)
+    REFERENCES espacos (id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ── Notificações push (api/notificacoes.py) ─────────────────

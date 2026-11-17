@@ -22,11 +22,13 @@ import {
   Target,
   Trash2,
   Trophy,
+  Users,
   X,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import ConfirmarExclusao from "../components/ConfirmarExclusao";
+import { useVisao } from "../context/VisaoProvider";
 import { brl } from "../services/financasService";
 import {
   alternarSubtarefa,
@@ -51,10 +53,12 @@ const formularioVazio = () => ({
   alvo: "",
   prazo: "",
   gerarSubtarefas: true,
+  doEspaco: false,
 });
 
 export default function Metas() {
   const navigate = useNavigate();
+  const { temEspaco } = useVisao();
 
   const [metas, setMetas] = useState([]);
   const [personagem, setPersonagem] = useState(null);
@@ -176,6 +180,20 @@ export default function Metas() {
     } catch (err) {
       avisar(err.message, "error");
       await carregar();
+    } finally {
+      setOcupada(null);
+    }
+  };
+
+  // Só quem criou leva a meta para o espaço ou de volta (o servidor confere).
+  const alternarEspaco = async (meta) => {
+    setOcupada(`m${meta.id}`);
+    try {
+      await atualizarMeta(meta.id, { doEspaco: !meta.doEspaco });
+      await carregar();
+      avisar(meta.doEspaco ? "A meta voltou a ser só sua." : "A meta agora é do espaço: todos mexem nela.");
+    } catch (err) {
+      avisar(err.message, "error");
     } finally {
       setOcupada(null);
     }
@@ -436,6 +454,21 @@ export default function Metas() {
               </div>
             </div>
 
+            {temEspaco && (
+              <label className="fin-check-linha">
+                <input
+                  type="checkbox"
+                  checked={form.doEspaco}
+                  onChange={(e) => setForm({ ...form, doEspaco: e.target.checked })}
+                />
+                <Users size={14} />
+                <span>
+                  Meta do espaço
+                  <small> (todos do espaço veem e marcam os passos)</small>
+                </span>
+              </label>
+            )}
+
             <label className={`fin-check-linha${iaDisponivel ? "" : " fin-check-linha--off"}`}>
               <input
                 type="checkbox"
@@ -555,6 +588,12 @@ export default function Metas() {
                     <div className="fin-meta__titulo">{meta.titulo}</div>
                     {meta.descricao && <div className="fin-meta__desc">{meta.descricao}</div>}
                     <div className="fin-meta__meta">
+                      {meta.doEspaco && (
+                        <span className="fin-meta__espaco">
+                          <Users size={11} /> Do espaço
+                          {meta.criadaPor ? `, criada por ${meta.criadaPor}` : ""}
+                        </span>
+                      )}
                       {meta.alvo != null && <span>{brl(meta.alvo)}</span>}
                       {meta.prazo && <span>até {meta.prazo.split("-").reverse().join("/")}</span>}
                       {!meta.concluida && <span>+{p.xpRestante} XP disponíveis</span>}
@@ -562,15 +601,17 @@ export default function Metas() {
                     </div>
                   </div>
 
-                  <button
-                    className="fin-lanc-item__excluir"
-                    onClick={() => setExclusao({ tipo: "meta", item: meta })}
-                    disabled={ocupadaAqui}
-                    aria-label={`Remover meta ${meta.titulo}`}
-                    title="Remover meta"
-                  >
-                    <Trash2 size={14} />
-                  </button>
+                  {meta.minha && (
+                    <button
+                      className="fin-lanc-item__excluir"
+                      onClick={() => setExclusao({ tipo: "meta", item: meta })}
+                      disabled={ocupadaAqui}
+                      aria-label={`Remover meta ${meta.titulo}`}
+                      title="Remover meta"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  )}
                 </div>
 
                 {p.total > 0 && (
@@ -619,6 +660,7 @@ export default function Metas() {
                   ))}
                 </div>
 
+                {!meta.concluida && (
                 <form className="fin-sub-nova" onSubmit={(e) => adicionarSub(meta, e)}>
                   <input
                     value={novaSub[meta.id] || ""}
@@ -634,6 +676,7 @@ export default function Metas() {
                     <Plus size={13} />
                   </button>
                 </form>
+                )}
 
                 <div className="fin-meta__acoes">
                   <button
@@ -669,6 +712,16 @@ export default function Metas() {
                           {p.total ? "Sugerir mais passos" : "Sugerir passos"}
                         </>
                       )}
+                    </button>
+                  )}
+
+                  {meta.minha && (temEspaco || meta.doEspaco) && (
+                    <button
+                      className="fin-btn fin-btn--ghost fin-btn--sm"
+                      onClick={() => alternarEspaco(meta)}
+                      disabled={ocupadaAqui}
+                    >
+                      <Users size={13} /> {meta.doEspaco ? "Tirar do espaço" : "Levar para o espaço"}
                     </button>
                   )}
                 </div>

@@ -24,6 +24,7 @@ import {
   Trash2,
   TriangleAlert,
   User,
+  Users,
   Wand2,
 } from "lucide-react";
 import QRCode from "qrcode";
@@ -36,6 +37,7 @@ import NotificacoesCard from "../components/NotificacoesCard";
 import PasskeysCard from "../components/PasskeysCard";
 import { useTheme } from "../context/ThemeProvider";
 import { usePerfil } from "../context/PerfilProvider";
+import { useVisao } from "../context/VisaoProvider";
 import { desativar2FA, iniciarSetup2FA, verificar2FA } from "../services/authService";
 import {
   apagarRegra,
@@ -98,6 +100,10 @@ export default function Configuracoes() {
   const [listaCategorias, setListaCategorias] = useState([]);
   const [salvandoOrc, setSalvandoOrc] = useState(false);
   const [sugestao, setSugestao] = useState({});
+  // "eu": os tetos da pessoa; "juntos": os da casa, contra o gasto somado.
+  const [escopoOrc, setEscopoOrc] = useState("eu");
+  const [trocandoEscopo, setTrocandoEscopo] = useState(false);
+  const { temEspaco } = useVisao();
 
   // Regras de categoria (criadas no editor de Entradas/Saídas)
   const [regras, setRegras] = useState([]);
@@ -127,16 +133,8 @@ export default function Configuracoes() {
           carregarOrcamentos(),
           listarRegras(),
         ]);
-        const transacoes = contaveis(todas);
-        setListaCategorias(extrairCategorias(transacoes));
-        setOrcamentos(orc || {});
-        setSugestao(sugerirOrcamentos(transacoes));
+        aplicarOrcamento(todas, orc);
         setRegras(rs || []);
-        setGastoDoMes(
-          Object.fromEntries(
-            gastosPorCategoria(transacoes, chaveMes(new Date())).map((c) => [c.label, c.valor]),
-          ),
-        );
       } catch (e) {
         console.error(e);
         avisar("Não consegui carregar suas configurações.", "error");
@@ -145,6 +143,34 @@ export default function Configuracoes() {
       }
     })();
   }, []);
+
+  // Lista de categorias, gasto do mês e sugestão saem das transações do
+  // MESMO recorte dos tetos: na casa, o gasto somado de quem compartilha.
+  function aplicarOrcamento(todas, orc) {
+    const transacoes = contaveis(todas);
+    setListaCategorias(extrairCategorias(transacoes));
+    setOrcamentos(orc || {});
+    setSugestao(sugerirOrcamentos(transacoes));
+    setGastoDoMes(
+      Object.fromEntries(
+        gastosPorCategoria(transacoes, chaveMes(new Date())).map((c) => [c.label, c.valor]),
+      ),
+    );
+  }
+
+  const trocarEscopo = async (escopo) => {
+    if (escopo === escopoOrc) return;
+    setTrocandoEscopo(true);
+    try {
+      const [todas, orc] = await Promise.all([listarTransacoes(escopo), carregarOrcamentos(escopo)]);
+      aplicarOrcamento(todas, orc);
+      setEscopoOrc(escopo);
+    } catch (e) {
+      avisar(e.message, "error");
+    } finally {
+      setTrocandoEscopo(false);
+    }
+  };
 
   // ── Seus dados ────────────────────────────────────────────────────────────
   const handleExportar = async () => {
@@ -336,8 +362,8 @@ export default function Configuracoes() {
     e.preventDefault();
     setSalvandoOrc(true);
     try {
-      setOrcamentos(await salvarOrcamentos(orcamentos));
-      avisar("Orçamentos salvos.");
+      setOrcamentos(await salvarOrcamentos(orcamentos, escopoOrc));
+      avisar(escopoOrc === "juntos" ? "Orçamento da casa salvo." : "Orçamentos salvos.");
     } catch (err) {
       avisar(err.message, "error");
     } finally {
@@ -706,10 +732,31 @@ export default function Configuracoes() {
             <Target size={15} /> Orçamento por categoria
           </div>
 
+          {temEspaco && (
+            <div className="fin-seg" role="radiogroup" aria-label="De quem é o orçamento" style={{ marginBottom: 12 }}>
+              {[
+                ["eu", "Meu", User],
+                ["juntos", "Da casa", Users],
+              ].map(([valor, rotulo, Icone]) => (
+                <button
+                  key={valor}
+                  type="button"
+                  role="radio"
+                  aria-checked={escopoOrc === valor}
+                  className={escopoOrc === valor ? "active" : ""}
+                  disabled={trocandoEscopo}
+                  onClick={() => trocarEscopo(valor)}
+                >
+                  <Icone size={13} /> {rotulo}
+                </button>
+              ))}
+            </div>
+          )}
+
           <p className="fin-field__hint" style={{ marginBottom: 12 }}>
-            Teto mensal de cada categoria. É daqui que saem os avisos de
-            &ldquo;gasto acima do previsto&rdquo; no painel. Deixe em branco ou zero para
-            não acompanhar a categoria.
+            {escopoOrc === "juntos"
+              ? "Teto mensal da casa, comparado com o gasto somado de vocês na visão Juntos. Qualquer pessoa do espaço edita. Enquanto a casa não salvar os dela, valem os tetos de cada um somados."
+              : "Teto mensal de cada categoria. É daqui que saem os avisos de “gasto acima do previsto” no painel. Deixe em branco ou zero para não acompanhar a categoria."}
           </p>
 
           {listaCategorias.length === 0 ? (

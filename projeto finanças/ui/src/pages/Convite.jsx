@@ -11,10 +11,10 @@
 // O vínculo em si nunca acontece nesta página: só depois que a pessoa
 // entrou de verdade (com 2FA e aceite dos termos) e respondeu que sim.
 
-import { Eye, EyeOff, Loader2, UserPlus, Users, Wallet } from "lucide-react";
+import { Loader2, Users, Wallet } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { guardarToken } from "../services/api";
+import FormCadastro from "../components/FormCadastro";
 import { sessaoValida } from "../services/authService";
 import {
   cadastrarPorConvite,
@@ -29,14 +29,6 @@ export default function Convite() {
 
   const [convite, setConvite] = useState(null);
   const [falha, setFalha] = useState("");
-  const [nome, setNome] = useState("");
-  const [email, setEmail] = useState("");
-  const [senha, setSenha] = useState("");
-  const [repetir, setRepetir] = useState("");
-  const [mostrar, setMostrar] = useState(false);
-  const [erro, setErro] = useState("");
-  const [enviando, setEnviando] = useState(false);
-
   useEffect(() => {
     (async () => {
       // Logado: prende o convite à conta e vai para o app, onde a
@@ -65,25 +57,6 @@ export default function Convite() {
       }
     })();
   }, [token, navigate]);
-
-  const criarConta = async (e) => {
-    e.preventDefault();
-    setErro("");
-    if (senha !== repetir) {
-      setErro("As senhas não são iguais.");
-      return;
-    }
-    setEnviando(true);
-    try {
-      const r = await cadastrarPorConvite(token, { nome, email, senha });
-      guardarToken(r.token);
-      navigate("/login", { replace: true, state: { continuar: "setup2fa", email } });
-    } catch (err) {
-      setErro(err.message);
-    } finally {
-      setEnviando(false);
-    }
-  };
 
   const jaTenhoConta = () => {
     guardarConviteEmTransito(token);
@@ -147,98 +120,7 @@ export default function Convite() {
                 {convite.convidadoPor}.
               </p>
 
-              {erro && (
-                <div className="fin-alert fin-alert--error" role="alert" style={{ marginBottom: 14 }}>
-                  {erro}
-                </div>
-              )}
-
-              <form className="fin-login__form" onSubmit={criarConta}>
-                <div className="fin-field">
-                  <label htmlFor="cv-nome">Seu nome</label>
-                  <input
-                    id="cv-nome"
-                    autoComplete="name"
-                    value={nome}
-                    onChange={(e) => setNome(e.target.value)}
-                    maxLength={120}
-                    required
-                  />
-                </div>
-                <div className="fin-field">
-                  <label htmlFor="cv-email">E-mail</label>
-                  <input
-                    id="cv-email"
-                    type="email"
-                    autoComplete="username"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    required
-                  />
-                </div>
-                <div className="fin-field">
-                  <label htmlFor="cv-senha">Senha</label>
-                  <div className="fin-pwd">
-                    <input
-                      id="cv-senha"
-                      type={mostrar ? "text" : "password"}
-                      autoComplete="new-password"
-                      value={senha}
-                      onChange={(e) => setSenha(e.target.value)}
-                      minLength={8}
-                      required
-                    />
-                    <button
-                      type="button"
-                      className="fin-pwd__toggle"
-                      onClick={() => setMostrar((v) => !v)}
-                      aria-label={mostrar ? "Ocultar senha" : "Mostrar senha"}
-                    >
-                      {mostrar ? <EyeOff size={15} /> : <Eye size={15} />}
-                    </button>
-                  </div>
-                  <span className="fin-field__hint">Pelo menos 8 caracteres.</span>
-                </div>
-                <div className="fin-field">
-                  <label htmlFor="cv-repetir">Repita a senha</label>
-                  <input
-                    id="cv-repetir"
-                    type={mostrar ? "text" : "password"}
-                    autoComplete="new-password"
-                    value={repetir}
-                    onChange={(e) => setRepetir(e.target.value)}
-                    required
-                  />
-                </div>
-
-                <p className="fin-field__hint">
-                  Ao criar a conta você vai aceitar os{" "}
-                  <Link to="/termos" target="_blank">
-                    Termos de uso
-                  </Link>{" "}
-                  e a{" "}
-                  <Link to="/privacidade" target="_blank">
-                    Política de privacidade
-                  </Link>{" "}
-                  no primeiro acesso.
-                </p>
-
-                <button
-                  type="submit"
-                  className="fin-btn fin-btn--primary fin-btn--block"
-                  disabled={enviando}
-                >
-                  {enviando ? (
-                    <>
-                      <Loader2 size={14} className="fin-spin" /> Criando...
-                    </>
-                  ) : (
-                    <>
-                      <UserPlus size={14} /> Criar minha conta
-                    </>
-                  )}
-                </button>
-              </form>
+              <FormCadastro criar={(dados) => cadastrarPorConvite(token, dados)} />
 
               <div className="fin-login__ou">
                 <span>já tem conta no Lastro?</span>

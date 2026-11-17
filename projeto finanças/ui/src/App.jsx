@@ -4,6 +4,7 @@ import AppLayout from "./components/AppLayout";
 import { PerfilProvider } from "./context/PerfilProvider";
 import { VisaoProvider } from "./context/VisaoProvider";
 import Aceite from "./pages/Aceite";
+import Cadastro from "./pages/Cadastro";
 import Configuracoes from "./pages/Configuracoes";
 import Conferir from "./pages/Conferir";
 import Convite from "./pages/Convite";
@@ -42,6 +43,7 @@ export default function App() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
+      <Route path="/cadastro" element={<Cadastro />} />
       <Route path="/aceite" element={<Aceite />} />
       <Route path="/convite/:token" element={<Convite />} />
       <Route path="/termos" element={<Documento tipo="termos" />} />

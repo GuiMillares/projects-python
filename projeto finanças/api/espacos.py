@@ -234,8 +234,18 @@ def _tirar(cur, usuario_id: int):
     restantes = [r["usuario_id"] for r in cur.fetchall()]
     if len(restantes) <= 1:
         # Uma pessoa sozinha não tem com quem compartilhar: o espaço acaba.
+        # Cada meta do espaço volta a ser pessoal de quem a criou; os tetos
+        # do espaço (orcamentos_espaco) vão junto pela chave estrangeira.
+        cur.execute("UPDATE metas SET espaco_id = NULL WHERE espaco_id = %s", (m["espaco_id"],))
         cur.execute("DELETE FROM espacos WHERE id = %s", (m["espaco_id"],))
-    elif m["papel"] == "dono":
+        return
+    # O espaço continua: as metas da casa que essa pessoa criou ficam na
+    # casa, com quem está nela há mais tempo.
+    cur.execute(
+        "UPDATE metas SET usuario_id = %s WHERE espaco_id = %s AND usuario_id = %s",
+        (restantes[0], m["espaco_id"], usuario_id),
+    )
+    if m["papel"] == "dono":
         cur.execute(
             "UPDATE espaco_membros SET papel = 'dono' WHERE usuario_id = %s", (restantes[0],)
         )

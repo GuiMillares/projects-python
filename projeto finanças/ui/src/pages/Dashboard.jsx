@@ -105,7 +105,7 @@ export default function Dashboard() {
       try {
         const [ts, orc, sit] = await Promise.all([
           listarTransacoes(visao),
-          carregarOrcamentos(),
+          carregarOrcamentos(visao),
           situacaoOpenFinance(visao).catch(() => ({ conexoes: 0 })),
         ]);
         setTransacoes(contaveis(ts));

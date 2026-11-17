@@ -31,9 +31,12 @@ COLUNAS = [
     ("transacoes", "conexao_id", "INT UNSIGNED NULL"),
     ("transacoes", "privada", "TINYINT(1) NOT NULL DEFAULT 0"),
     ("conexoes_bancarias", "privada", "TINYINT(1) NOT NULL DEFAULT 0"),
+    ("investimentos", "privada", "TINYINT(1) NOT NULL DEFAULT 0"),
+    ("metas", "espaco_id", "INT UNSIGNED NULL"),
 ]
 INDICES = [
     ("transacoes", "ix_transacoes_conexao", "(conexao_id)"),
+    ("metas", "ix_metas_espaco", "(espaco_id)"),
 ]
 
 

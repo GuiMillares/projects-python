@@ -7,7 +7,11 @@ import { api } from "./api";
  * erro de carregamento: os itens vêm completos com quantidade e preço médio,
  * só sem os números de mercado. A tela mostra o aviso e segue funcionando.
  */
-export const listarInvestimentos = () => api.get("/api/investimentos");
+export const listarInvestimentos = (visao = "eu") =>
+  api.get(`/api/investimentos?visao=${encodeURIComponent(visao)}`);
+
+/** Cadeado: a posição some da visão dos outros membros do espaço. */
+export const cadeadoInvestimento = (id, privada) => api.patch(`/api/investimentos/${id}`, { privada });
 
 export const criarInvestimento = (i) => api.post("/api/investimentos", i);
 

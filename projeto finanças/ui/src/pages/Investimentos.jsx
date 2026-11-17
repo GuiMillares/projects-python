@@ -14,17 +14,22 @@ import {
   Plus,
   RefreshCw,
   Trash2,
+  Lock,
+  LockOpen,
   TrendingDown,
   TrendingUp,
   Wallet,
   X,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import SeletorVisao from "../components/SeletorVisao";
+import { useVisao } from "../context/VisaoProvider";
 import { useNavigate } from "react-router-dom";
 import ConfirmarExclusao from "../components/ConfirmarExclusao";
 import { brl, dataCurta } from "../services/financasService";
 import {
   apagarInvestimento,
+  cadeadoInvestimento,
   buscarCotacao,
   calcularPosicao,
   criarInvestimento,
@@ -58,6 +63,7 @@ const pct = (n) =>
 export default function Investimentos() {
   const navigate = useNavigate();
 
+  const { visao, temEspaco } = useVisao();
   const [itens, setItens] = useState([]);
   const [aviso, setAviso] = useState(null);
   const [carregando, setCarregando] = useState(true);
@@ -130,7 +136,7 @@ export default function Investimentos() {
     async ({ silencioso = false } = {}) => {
       if (silencioso) setAtualizando(true);
       try {
-        const r = await listarInvestimentos();
+        const r = await listarInvestimentos(visao);
         setItens(r.itens || []);
         setAviso(r.aviso || null);
         setFalha("");
@@ -145,12 +151,22 @@ export default function Investimentos() {
         setAtualizando(false);
       }
     },
-    [navigate],
+    [navigate, visao],
   );
 
   useEffect(() => {
     carregar();
   }, [carregar]);
+
+  const alternarCadeado = async (p) => {
+    try {
+      await cadeadoInvestimento(p.id, !p.privada);
+      setItens((lista) => lista.map((i) => (i.id === p.id ? { ...i, privada: !p.privada } : i)));
+      avisar(p.privada ? `${p.ticker} volta a aparecer para o espaço.` : `${p.ticker} agora só você vê.`);
+    } catch (e) {
+      avisar(e.message, "error");
+    }
+  };
 
   const { posicoes, resumo } = useMemo(() => {
     const p = itens.map(calcularPosicao);
@@ -210,6 +226,8 @@ export default function Investimentos() {
           <h1 className="fin-page-title">Investimentos</h1>
           <p className="fin-page-sub">Carteira com cotação da B3</p>
         </div>
+
+        <SeletorVisao />
 
         <div className="fin-form__actions">
           <button
@@ -452,7 +470,7 @@ export default function Investimentos() {
                   <div className="fin-carteira__ativo">
                     <div className="fin-carteira__ticker">{p.ticker}</div>
                     <div className="fin-carteira__nome">
-                      {p.cotacao?.nome || `desde ${dataCurta(p.data)}`}
+                      {p.dono ? `de ${p.dono}` : p.cotacao?.nome || `desde ${dataCurta(p.data)}`}
                     </div>
                   </div>
 
@@ -494,15 +512,31 @@ export default function Investimentos() {
                     )}
                   </div>
 
-                  <button
-                    className="fin-lanc-item__excluir"
-                    onClick={() => setParaExcluir(p)}
-                    disabled={apagando === p.id}
-                    aria-label={`Remover ${p.ticker}`}
-                    title="Remover"
-                  >
-                    <Trash2 size={14} />
-                  </button>
+                  {p.minha ? (
+                    <div className="fin-carteira__acoes">
+                      {temEspaco && (
+                        <button
+                          className={`fin-lanc-item__excluir${p.privada ? " fin-cadeado--on" : ""}`}
+                          onClick={() => alternarCadeado(p)}
+                          aria-label={p.privada ? `${p.ticker}: só você vê. Tirar o cadeado` : `Pôr cadeado em ${p.ticker}`}
+                          title={p.privada ? "Só você vê. Tocar para mostrar ao espaço" : "Visível para o espaço. Tocar para esconder"}
+                        >
+                          {p.privada ? <Lock size={14} /> : <LockOpen size={14} />}
+                        </button>
+                      )}
+                      <button
+                        className="fin-lanc-item__excluir"
+                        onClick={() => setParaExcluir(p)}
+                        disabled={apagando === p.id}
+                        aria-label={`Remover ${p.ticker}`}
+                        title="Remover"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  ) : (
+                    <span />
+                  )}
                 </div>
               );
             })}

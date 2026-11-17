@@ -44,7 +44,7 @@ const LEDGER = [
 
 export default function Login() {
   const navigate = useNavigate();
-  // Conta recém-criada por convite chega aqui com a sessão parcial já
+  // Conta recém-criada (cadastro ou convite) chega aqui com a sessão parcial já
   // guardada: o próximo passo é o cadastro do 2FA, sem pedir a senha de novo.
   const local = useLocation();
   const continuar = local.state?.continuar;
@@ -282,6 +282,10 @@ export default function Login() {
                   <BotaoPasskey ocupado={entrandoPasskey} onClick={entrarPasskey} />
                 </>
               )}
+
+              <p className="fin-login__cadastro">
+                Ainda não tem conta? <Link to="/cadastro">Criar conta</Link>
+              </p>
             </>
           )}
 

@@ -28,14 +28,15 @@ TERMOS = {
     "secoes": [
         _secao(
             "1. O que é este app",
-            "O Lastro é um app de finanças pessoais feito e mantido por uma pessoa só, usado por "
-            "convite entre família e amigos. Ele reúne num lugar seus lançamentos, contas, "
-            "cartões, investimentos e metas.",
+            "O Lastro é um app de finanças pessoais feito e mantido por uma pessoa só. Ele reúne "
+            "num lugar seus lançamentos, contas, cartões, investimentos e metas, e pode ser "
+            "dividido com seu par ou sua família.",
         ),
         _secao(
             "2. Quem pode usar",
-            "Pessoas maiores de 18 anos que receberam um convite. Cada conta é de uma pessoa "
-            "só: não empreste sua senha nem o seu app autenticador.",
+            "Pessoas maiores de 18 anos. Cada conta é de uma pessoa só: não empreste sua senha "
+            "nem o seu app autenticador. Um cadastro que não chega à verificação em duas "
+            "etapas em 7 dias é apagado, e depois de 24 horas não segura mais o e-mail.",
         ),
         _secao(
             "3. Sua conta",
@@ -58,9 +59,11 @@ TERMOS = {
             "Você pode convidar seu par ou sua família (até 6 pessoas) para um espaço "
             "compartilhado, por um link de uso único que vale 7 dias. Quem recebe decide se "
             "vincula. Dentro do espaço, cada pessoa vê o que as outras compartilham, mas só "
-            "quem lançou edita ou apaga; as metas do espaço são a exceção, e todos mexem nelas.",
-            "Tudo é compartilhado por padrão. Uma conta bancária ou um lançamento marcado como "
-            "privado não aparece para os outros nem entra na soma do Juntos. Qualquer pessoa "
+            "quem lançou edita ou apaga. As metas do espaço e os orçamentos da casa são a "
+            "exceção: todos mexem neles. Quem sai do espaço deixa nele as metas do espaço que "
+            "criou.",
+            "Tudo é compartilhado por padrão, menos as metas pessoais. Uma conta bancária, um "
+            "lançamento ou um investimento marcado como privado não aparece para os outros nem entra na soma do Juntos. Qualquer pessoa "
             "pode sair do espaço quando quiser, e o acesso dos outros aos dados dela acaba na "
             "hora. Quem administra o espaço pode remover alguém.",
         ),
@@ -164,7 +167,8 @@ def _privacidade():
                 "5. Com quem os dados são compartilhados",
                 itens=[
                     "Pessoas do seu espaço compartilhado, se você vincular: veem seus "
-                    "lançamentos, contas, saldos, faturas, investimentos e metas, e o seu "
+                    "lançamentos, contas, saldos, faturas, investimentos e orçamentos, as metas "
+                    "que você puser no espaço, e o seu "
                     "nome e e-mail. Não veem o que você marcar como privado. Ao sair do "
                     "espaço, deixam de ver na hora.",
                     "Pluggy: lê os dados das suas contas e cartões no Open Finance, pela sua "

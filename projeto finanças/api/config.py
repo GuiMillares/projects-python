@@ -177,3 +177,7 @@ URL_PUBLICA = os.getenv("FIN_URL_PUBLICA", "").strip().rstrip("/")
 # Segredo da rotina diária. A Vercel manda "Authorization: Bearer <valor>"
 # quando a variável CRON_SECRET existe no projeto.
 CRON_SEGREDO = os.getenv("CRON_SECRET", "").strip()
+
+# Teto de contas novas por hora no cadastro aberto, somando todo mundo.
+# Gente de verdade não chega perto; um robô enchendo o banco para aqui.
+CADASTROS_POR_HORA = int(os.getenv("FIN_CADASTROS_POR_HORA", "20"))

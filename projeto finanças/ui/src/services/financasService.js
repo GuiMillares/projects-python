@@ -271,8 +271,12 @@ export function padraoSugerido(nome) {
     .slice(0, 60);
 }
 
-/** Tetos por categoria, na tabela `orcamentos`, chaveada por usuário. */
-export const carregarOrcamentos = () => api.get("/api/orcamentos");
+/**
+ * Tetos por categoria. "eu": os da pessoa; "juntos": os da casa (ou, sem
+ * eles, a soma dos de cada um); id de membro: os dele, só para ler.
+ */
+export const carregarOrcamentos = (visao = "eu") =>
+  api.get(`/api/orcamentos?visao=${encodeURIComponent(visao)}`);
 
 /**
  * Teto sugerido por categoria: média dos últimos `meses` meses FECHADOS
@@ -295,11 +299,11 @@ export function sugerirOrcamentos(transacoes, hoje = new Date(), meses = 3) {
 }
 
 /** Substitui o conjunto inteiro: categoria ausente perde o teto. */
-export const salvarOrcamentos = (orcamentos) => {
+export const salvarOrcamentos = (orcamentos, visao = "eu") => {
   const limpo = Object.fromEntries(
     Object.entries(orcamentos)
       .map(([k, v]) => [k, Number(v) || 0])
       .filter(([, v]) => v > 0),
   );
-  return api.put("/api/orcamentos", limpo);
+  return api.put(`/api/orcamentos${visao === "juntos" ? "?visao=juntos" : ""}`, limpo);
 };

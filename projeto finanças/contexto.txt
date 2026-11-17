@@ -717,8 +717,27 @@ NOTIFICAÇÕES PUSH (17/11/2026): api/notificacoes.py.
 * 29 verificações com envio, Pluggy e importação falsos; cifra aes128gcm
   e assinatura VAPID conferidas com chaves reais.
 
+Espaço, entrega 3, e cadastro aberto (17/11/2026):
+* Cadastro aberto em /cadastro (POST /api/auth/cadastro), link no login.
+  Sessão nasce parcial, segue para o 2FA. Teto global de contas novas por
+  hora (FIN_CADASTROS_POR_HORA, padrão 20). Conta sem 2FA há mais de 24 h
+  não segura o e-mail; há mais de 7 dias a rotina diária apaga.
+  FormCadastro.jsx serve ao cadastro e ao convite.
+* Metas do espaço: metas.espaco_id (sem FK). Todo membro vê, marca passo,
+  muda o guardado e conclui; só quem criou apaga ou tira do espaço. Quem
+  sai deixa as dele na casa (passam ao membro mais antigo); o espaço
+  acabando, cada meta volta a ser pessoal. Dificuldade da meta da casa
+  usa a renda somada (sem o que tem cadeado). Metas pessoais seguem só da
+  pessoa.
+* Investimentos: ?visao= e cadeado por posição (investimentos.privada,
+  PATCH /api/investimentos/<id>). Do outro: só leitura, com o nome.
+* Orçamentos: tabela orcamentos_espaco (tetos da casa, qualquer membro
+  edita). GET ?visao=juntos devolve os da casa ou, sem eles, a soma dos de
+  cada um. Configurações tem Meu / Da casa; a home usa os da visão.
+* documentos.VERSAO NÃO subiu: texto ajustado sem mudar o sentido. Regra:
+  só sobe quando muda o que acontece com os dados.
+* 43 verificações novas; as baterias antigas seguem passando.
+
 Próximos passos, nesta ordem:
-1. Espaço, entrega 3: metas do espaço (todos mexem), investimentos,
-   saldos das contas de todos (cada um lido com a PRÓPRIA credencial
-   Pluggy, no servidor) e orçamentos no Juntos.
-3. Backup do TiDB (ops/backup.py foi escrito para o MySQL local).
+1. Backup do TiDB (ops/backup.py foi escrito para o MySQL local).
+2. Importar OFX/CSV; editar lançamento existente.

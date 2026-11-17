@@ -522,6 +522,19 @@ textarea {
   background: var(--fin-border);
 }
 
+/* "Ainda não tem conta? Criar conta", embaixo do login e do cadastro. */
+.fin-login__cadastro {
+  margin-top: 20px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--fin-muted);
+}
+
+.fin-login__cadastro a {
+  color: var(--fin-accent);
+  font-weight: 600;
+}
+
 /* Lista de aparelhos com passkey (Configurações). */
 .fin-passkeys {
   list-style: none;
@@ -1821,6 +1834,27 @@ textarea {
   align-self: center;
 }
 
+/* Cadeado e excluir lado a lado, na última coluna. */
+.fin-carteira__acoes {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 2px;
+}
+
+.fin-cadeado--on {
+  color: var(--fin-accent);
+}
+
+/* Meta do espaço: o selo na linha de detalhes. */
+.fin-meta__espaco {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--fin-accent);
+  font-weight: 600;
+}
+
 .fin-carteira__ticker {
   font-family: var(--fin-font-num);
   font-size: 13px;
@@ -1881,6 +1915,11 @@ textarea {
     grid-column: span 1;
   }
 
+  .fin-carteira__linha > .fin-carteira__acoes {
+    grid-column: 3;
+    grid-row: 1;
+  }
+
   .fin-carteira__linha {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
   }
@@ -1894,7 +1933,7 @@ textarea {
   .fin-carteira__cab,
   .fin-carteira__linha {
     display: grid;
-    grid-template-columns: minmax(0, 1.4fr) repeat(4, minmax(0, 1fr)) 36px;
+    grid-template-columns: minmax(0, 1.4fr) repeat(4, minmax(0, 1fr)) 64px;
     align-items: center;
     gap: 12px;
   }
