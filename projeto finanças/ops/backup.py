@@ -206,27 +206,96 @@ def _podar(pasta):
     return apagados
 
 
+def _literal(con, v):
+    """Valor em SQL. Binário vai em hexadecimal (X'..'): bytes crus no meio
+    do texto não sobrevivem à conversão para UTF-8."""
+    if isinstance(v, (bytes, bytearray)):
+        return f"X'{bytes(v).hex()}'"
+    return con.escape(v)
+
+
+def _dump_python(origem, saida):
+    """Dump em SQL puro, escrito direto em `saida` (a entrada do gpg).
+
+    Usado para o TiDB: o mysqldump com --single-transaction faz
+    ROLLBACK TO SAVEPOINT entre tabelas, e o TiDB recusa. Aqui tudo é lido
+    numa transação com foto consistente (START TRANSACTION WITH CONSISTENT
+    SNAPSHOT, que o TiDB suporta), e a contagem sai da MESMA foto que os
+    dados: o manifesto bate exatamente com o arquivo. O formato é o de um
+    dump comum, que o `mysql` carrega no teste e na restauração."""
+    con = _conectar(origem["nome"], origem)
+    contagem = {}
+    escrever = lambda texto: saida.write(texto.encode("utf-8"))
+    try:
+        with con.cursor() as cur:
+            cur.execute("START TRANSACTION WITH CONSISTENT SNAPSHOT")
+            cur.execute("SHOW FULL TABLES WHERE Table_type = 'BASE TABLE'")
+            tabelas = sorted(t for t, _ in cur.fetchall())
+            escrever(f"-- Lastro: dump de {origem['nome']} em {datetime.now():%Y-%m-%d %H:%M:%S}\n"
+                     "SET NAMES utf8mb4;\nSET FOREIGN_KEY_CHECKS = 0;\nSET UNIQUE_CHECKS = 0;\n\n")
+            for t in tabelas:
+                cur.execute(f"SHOW CREATE TABLE `{t}`")
+                criar = cur.fetchone()[1]
+                escrever(f"DROP TABLE IF EXISTS `{t}`;\n{criar};\n")
+                cur.execute(f"SELECT * FROM `{t}`")
+                n = 0
+                while True:
+                    lote = cur.fetchmany(200)
+                    if not lote:
+                        break
+                    n += len(lote)
+                    valores = ",\n".join(
+                        "(" + ", ".join(_literal(con, v) for v in linha) + ")" for linha in lote
+                    )
+                    escrever(f"INSERT INTO `{t}` VALUES\n{valores};\n")
+                escrever("\n")
+                contagem[t] = n
+            escrever("SET FOREIGN_KEY_CHECKS = 1;\nSET UNIQUE_CHECKS = 1;\n")
+            cur.execute("COMMIT")
+    finally:
+        con.close()
+    return contagem
+
+
+def _fazer_tidb(origem, cifra, parcial):
+    proc = subprocess.Popen(cifra, stdin=subprocess.PIPE, stderr=subprocess.PIPE)
+    try:
+        contagem = _dump_python(origem, proc.stdin)
+    except Exception:
+        proc.stdin.close()
+        proc.wait()
+        parcial.unlink(missing_ok=True)
+        raise
+    proc.stdin.close()
+    erro = proc.stderr.read()
+    if proc.wait() != 0:
+        parcial.unlink(missing_ok=True)
+        raise Falha(f"gpg falhou: {erro.decode('utf-8', 'replace').strip()}")
+    return contagem
+
+
 def fazer(rotulo="financas", origem=LOCAL):
     pasta, frase = _pasta(), _frase()
     nome = f"{rotulo}-{datetime.now():%Y%m%d-%H%M%S}.sql.gpg"
     final = pasta / nome
     parcial = pasta / f"{nome}.parcial"
 
-    # Sem --routines: o schema não tem procedure, e pedir isso exigiria um
-    # privilégio a mais para o usuário de backup. --column-statistics=0 e
-    # --set-gtid-purged=OFF: o TiDB não tem a tabela de estatísticas nem
-    # GTID que o mysqldump 8 consulta; no MySQL não mudam nada.
+    # Banco local: mysqldump. Sem --routines: o schema não tem procedure, e
+    # pedir isso exigiria um privilégio a mais para o usuário de backup.
+    # Origem por --origem (TiDB): _dump_python, ver o porquê lá.
     dump = [_bin("mysqldump"), *_args_mysql(origem), "--single-transaction", "--quick",
-            "--no-tablespaces", "--column-statistics=0", "--set-gtid-purged=OFF",
-            "--default-character-set=utf8mb4", origem["nome"]]
+            "--no-tablespaces", "--default-character-set=utf8mb4", origem["nome"]]
     cifra = [GPG, "--batch", "--yes", "--pinentry-mode", "loopback", "--passphrase-file", frase,
              "--symmetric", "--cipher-algo", "AES256", "-o", str(parcial)]
-    try:
-        _rodar_pipe((dump, _env_mysql(origem)), (cifra, None), ("mysqldump", "gpg"))
-    except Falha:
-        parcial.unlink(missing_ok=True)
-        raise
-    contagem = _contar(origem["nome"], origem)
+    if origem is not LOCAL:
+        contagem = _fazer_tidb(origem, cifra, parcial)
+    else:
+        try:
+            _rodar_pipe((dump, _env_mysql(origem)), (cifra, None), ("mysqldump", "gpg"))
+        except Falha:
+            parcial.unlink(missing_ok=True)
+            raise
+        contagem = _contar(origem["nome"], origem)
     parcial.rename(final)
 
     (pasta / f"{final.stem.removesuffix('.sql')}.json").write_text(json.dumps({
@@ -285,8 +354,10 @@ def _orfaos(banco):
                 "SELECT TABLE_NAME FROM information_schema.COLUMNS "
                 "WHERE TABLE_SCHEMA = %s AND COLUMN_NAME = 'usuario_id'", (banco,))
             for (t,) in cur.fetchall():
+                # usuario_id NULL não é órfão: o desafio de entrar com
+                # passkey nasce antes de se saber quem é a pessoa.
                 cur.execute(f"SELECT COUNT(*) FROM `{t}` x LEFT JOIN usuarios u ON u.id = x.usuario_id "
-                            "WHERE u.id IS NULL")
+                            "WHERE x.usuario_id IS NOT NULL AND u.id IS NULL")
                 achados[t] = cur.fetchone()[0]
             cur.execute("SELECT COUNT(*) FROM subtarefas s LEFT JOIN metas m ON m.id = s.meta_id "
                         "WHERE m.id IS NULL")

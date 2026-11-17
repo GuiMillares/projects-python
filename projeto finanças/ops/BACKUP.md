@@ -198,7 +198,12 @@ Rode o `testar` uma vez por semana (passo 3). A última linha de
 3. Rode `ops/atualizar_banco.py` se o backup for de antes de alguma mudança
    no banco, e confira `/api/saude`.
 
-**Testado em 17/11/2026:** `fazer --origem` com um usuário só de leitura e
-`testar` no MySQL local, com o arquivo cifrado e as contagens batendo. O
-dump contra o próprio TiDB (TLS e as opções `--column-statistics=0` e
-`--set-gtid-purged=OFF`) é conferido no primeiro backup de verdade.
+**Como o dump do TiDB é feito:** pelo próprio Python, numa transação com
+foto consistente (`START TRANSACTION WITH CONSISTENT SNAPSHOT`), e não pelo
+`mysqldump`: o `--single-transaction` dele faz `ROLLBACK TO SAVEPOINT`, que o
+TiDB recusa. A contagem do manifesto sai da mesma foto que os dados. Valores
+binários vão em hexadecimal. O resultado é SQL comum, que o `mysql` carrega.
+
+**Testado em 17/11/2026:** backup real do TiDB com o usuário só de leitura,
+cifrado sem SQL legível, e `testar` no MySQL local com todas as tabelas
+batendo com o manifesto e o banco temporário apagado no fim.
