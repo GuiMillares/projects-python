@@ -32,5 +32,6 @@ os.environ.setdefault("FIN_DB_FUSO", "-03:00")
 # a origem esperada é o que impede um site falso de usar a passkey.
 os.environ.setdefault("FIN_WEBAUTHN_RP_ID", "meulastro.vercel.app")
 os.environ.setdefault("FIN_WEBAUTHN_ORIGENS", "https://meulastro.vercel.app")
+os.environ.setdefault("FIN_URL_PUBLICA", "https://meulastro.vercel.app")
 
 from app import app  # noqa: E402,F401

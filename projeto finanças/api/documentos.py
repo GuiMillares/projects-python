@@ -12,8 +12,8 @@ recebendo dado, cobrança, backup com outro prazo), o texto muda junto.
 
 import config
 
-VERSAO = "2026-11-17.3"
-VERSAO_POR_EXTENSO = "17 de novembro de 2026 (espaço compartilhado)"
+VERSAO = "2026-11-17.4"
+VERSAO_POR_EXTENSO = "17 de novembro de 2026 (notificações)"
 
 
 def _secao(titulo, *paragrafos, itens=None):
@@ -132,6 +132,9 @@ def _privacidade():
                     "Registros de segurança: as sessões abertas (só o resumo do código de "
                     "acesso), as tentativas de login erradas e a versão destes documentos "
                     "que você aceitou, com data e hora.",
+                    "Notificações, se você ligar: o endereço que o seu aparelho recebeu do "
+                    "serviço de push do sistema (Apple, Google ou Mozilla), as chaves que cifram "
+                    "as mensagens para ele, o nome do aparelho e o que você escolheu receber.",
                     "Espaço compartilhado: de qual espaço você faz parte, seu papel nele, "
                     "quando entrou e os convites que você gerou ou recebeu (do convite, só um "
                     "resumo do código, nunca o código em si).",
@@ -170,6 +173,10 @@ def _privacidade():
                     "do Gemini, o Google pode usar o conteúdo enviado para melhorar os "
                     "produtos dele, e o processamento pode acontecer fora do Brasil (art. 33 "
                     "da LGPD). Não escreva na meta nada que você não mandaria ao Google.",
+                    "Serviços de push (Apple, Google ou Mozilla, conforme o aparelho): levam "
+                    "as notificações até o seu celular. A mensagem vai cifrada para o seu "
+                    "aparelho, e o serviço não consegue ler o conteúdo. A Pluggy também passa "
+                    "a avisar o app quando chegam transações novas, para a notificação sair.",
                     "brapi.dev: recebe só os códigos dos ativos da sua carteira (por exemplo, "
                     "PETR4) para buscar a cotação. Nenhum dado seu vai junto.",
                     "Vercel: hospeda o app e roda o servidor dele. Seus dados passam por lá a "

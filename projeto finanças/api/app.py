@@ -10,7 +10,10 @@ Rodar:
     python app.py
 """
 
+import hashlib
+import hmac
 import re
+import secrets
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, timedelta
 from decimal import Decimal
@@ -26,6 +29,7 @@ import documentos
 import gamificacao
 import ia
 import espacos
+import notificacoes
 import openfinance
 import passkeys
 import seguranca
@@ -321,6 +325,177 @@ def espaco_remover(membro_id):
     except espacos.EspacoErro as e:
         return _erro_espaco(e)
     return jsonify(espacos.resumo(g.sessao["usuario_id"]))
+
+
+# ── Notificações push (api/notificacoes.py) ──────────────────
+def _garantir_webhook(uid):
+    """Webhook da Pluggy desta pessoa, criado com a credencial DELA. Sem
+    credencial ou sem endereço público (rodando no PC), não há webhook: a
+    rotina diária cobre. Devolve um texto curto do estado para a tela."""
+    cred, _ = _credencial(uid)
+    if not cred:
+        return "semCredencial"
+    if not config.URL_PUBLICA.startswith("https://"):
+        return "semEnderecoPublico"
+    atual = buscar_um("SELECT webhook_id, client_id FROM webhooks_pluggy WHERE usuario_id = %s", (uid,))
+    if atual and atual["webhook_id"] and atual["client_id"] == cred.client_id:
+        return "ok"
+    if atual:
+        _desligar_webhook(uid, cred)
+
+    rota, segredo = secrets.token_hex(16), secrets.token_urlsafe(32)
+    webhook_id, aviso = openfinance.criar_webhook(
+        cred, f"{config.URL_PUBLICA}/api/pluggy/webhook/{rota}", segredo
+    )
+    if aviso:
+        app.logger.warning("webhook da Pluggy não criado: %s", aviso)
+        return "falhou"
+    with cursor(commit=True) as cur:
+        cur.execute(
+            "INSERT INTO webhooks_pluggy (usuario_id, rota, segredo_hash, webhook_id, client_id) "
+            "VALUES (%s, %s, %s, %s, %s) ON DUPLICATE KEY UPDATE rota = VALUES(rota), "
+            "segredo_hash = VALUES(segredo_hash), webhook_id = VALUES(webhook_id), "
+            "client_id = VALUES(client_id)",
+            (uid, rota, hashlib.sha256(segredo.encode()).hexdigest(), webhook_id, cred.client_id),
+        )
+    return "ok"
+
+
+def _desligar_webhook(uid, cred):
+    linha = buscar_um("SELECT webhook_id FROM webhooks_pluggy WHERE usuario_id = %s", (uid,))
+    if not linha:
+        return
+    openfinance.apagar_webhook(cred, linha["webhook_id"])
+    with cursor(commit=True) as cur:
+        cur.execute("DELETE FROM webhooks_pluggy WHERE usuario_id = %s", (uid,))
+
+
+@app.get("/api/push")
+@exige_sessao()
+def push_estado():
+    uid = g.sessao["usuario_id"]
+    endpoint = request.args.get("endpoint") or ""
+    return jsonify({
+        "disponivel": notificacoes.disponivel(),
+        "chavePublica": config.VAPID_PUBLICA or None,
+        "aparelhos": notificacoes.aparelhos(uid),
+        "esteAparelho": notificacoes.inscrito(uid, endpoint) if endpoint else False,
+        "preferencias": notificacoes.preferencias(uid),
+        "bancosAvisam": bool(buscar_um(
+            "SELECT 1 AS x FROM webhooks_pluggy WHERE usuario_id = %s AND webhook_id IS NOT NULL", (uid,)
+        )),
+    })
+
+
+@app.post("/api/push/inscricao")
+@exige_sessao()
+def push_inscrever():
+    if not notificacoes.disponivel():
+        return erro("O servidor ainda não está pronto para notificações.", 503)
+    d = request.get_json(silent=True) or {}
+    try:
+        notificacoes.inscrever(g.sessao["usuario_id"], d.get("inscricao") or {}, str(d.get("aparelho") or ""))
+    except ValueError as e:
+        return erro(str(e))
+    return jsonify({"ok": True, "bancos": _garantir_webhook(g.sessao["usuario_id"])}), 201
+
+
+@app.delete("/api/push/inscricao")
+@exige_sessao()
+def push_desinscrever():
+    notificacoes.desinscrever(g.sessao["usuario_id"], (request.get_json(silent=True) or {}).get("endpoint"))
+    return jsonify({"ok": True})
+
+
+@app.put("/api/push/preferencias")
+@exige_sessao()
+def push_preferencias():
+    return jsonify(notificacoes.salvar_preferencias(g.sessao["usuario_id"], request.get_json(silent=True) or {}))
+
+
+@app.post("/api/push/teste")
+@exige_sessao()
+def push_teste():
+    n = notificacoes.enviar(
+        g.sessao["usuario_id"], "Notificações ligadas",
+        "É assim que o Lastro vai te avisar de entradas, saídas e faturas.", "/app", "teste",
+    )
+    if not n:
+        return erro("Nenhum aparelho recebeu. Ative as notificações neste aparelho primeiro.", 409)
+    return jsonify({"ok": True, "aparelhos": n})
+
+
+@app.post("/api/pluggy/webhook/<rota>")
+def pluggy_webhook(rota):
+    """Aviso da Pluggy de transações novas. Só vale com o segredo que foi
+    combinado na criação do webhook (a Pluggy não assina os avisos). O
+    corpo é só um sinal: o que entra vem da importação normal, relida da
+    Pluggy, como a própria documentação dela recomenda.
+
+    A Pluggy espera 2XX em até 10 s; se passar disso ela tenta de novo mais
+    tarde, e a importação não duplica nada (nem a notificação, que só sai
+    para o que entrou agora)."""
+    w = buscar_um(
+        "SELECT usuario_id, segredo_hash FROM webhooks_pluggy WHERE rota = %s", (str(rota)[:32],)
+    )
+    segredo = request.headers.get("X-Lastro-Segredo", "")
+    if not w or not hmac.compare_digest(hashlib.sha256(segredo.encode()).hexdigest(), w["segredo_hash"]):
+        return erro("Não autorizado.", 401)
+
+    d = request.get_json(silent=True) or {}
+    if d.get("event") != "transactions/created":
+        return jsonify({"ok": True})
+    uid = w["usuario_id"]
+    if not buscar_um(
+        "SELECT 1 AS x FROM conexoes_bancarias WHERE usuario_id = %s AND item_id = %s",
+        (uid, str(d.get("itemId") or "")[:36]),
+    ):
+        return jsonify({"ok": True})
+
+    hoje = date.today()
+    desde = hoje - timedelta(days=7)
+    try:
+        minima = date.fromisoformat(str(d.get("transactionsMinDate") or "")[:10])
+        desde = max(min(desde, minima), hoje - timedelta(days=35))
+    except ValueError:
+        pass
+    try:
+        resultado, aviso = importar_para(uid, desde)
+        if resultado:
+            notificacoes.avisar_transacoes(uid, resultado["_novas"])
+    except Exception:  # noqa: BLE001
+        app.logger.exception("webhook da Pluggy: falha ao importar")
+    return jsonify({"ok": True})
+
+
+@app.get("/api/cron/diario")
+def cron_diario():
+    """Rotina diária (cron da Vercel, 8h de Brasília): faturas vencendo e,
+    como rede de segurança do webhook, a importação da última semana de
+    quem tem notificações ligadas."""
+    esperado = f"Bearer {config.CRON_SEGREDO}"
+    if not config.CRON_SEGREDO or not hmac.compare_digest(request.headers.get("Authorization", ""), esperado):
+        return erro("Não autorizado.", 401)
+
+    hoje = date.today()
+    pessoas = [r["usuario_id"] for r in buscar_todos("SELECT DISTINCT usuario_id FROM push_inscricoes")]
+    resumo = {"pessoas": len(pessoas), "transacoes": 0, "faturas": 0}
+    for uid in pessoas:
+        try:
+            conexoes = _conexoes(uid)
+            cred, _ = _credencial(uid)
+            if not conexoes or not cred:
+                continue
+            resultado, _ = importar_para(uid, hoje - timedelta(days=7))
+            if resultado:
+                resumo["transacoes"] += notificacoes.avisar_transacoes(uid, resultado["_novas"])
+            with ThreadPoolExecutor(max_workers=max(1, min(5, len(conexoes)))) as ex:
+                lidas = list(ex.map(lambda c: openfinance.panorama(cred, c["item_id"]), conexoes))
+            cartoes = [k for dados, _ in lidas if dados for k in dados.get("cartoes", [])]
+            resumo["faturas"] += notificacoes.avisar_faturas(uid, cartoes, hoje)
+        except Exception:  # noqa: BLE001
+            app.logger.exception("rotina diária falhou para uma pessoa")
+    return jsonify({"ok": True, **resumo})
 
 
 # ── Passkeys (Face ID / digital) ─────────────────────────────
@@ -1438,7 +1613,10 @@ def salvar_credencial():
             (uid, client_id, cofre.cifrar(segredo)),
         )
     if anterior and anterior != nova:
+        _desligar_webhook(uid, anterior)
         openfinance.esquecer_credencial(anterior)
+    if notificacoes.aparelhos(uid):
+        _garantir_webhook(uid)
     return jsonify({"ok": True, "clientId": client_id})
 
 
@@ -1449,6 +1627,7 @@ def apagar_credencial():
     ser lidas até entrar outra credencial; o consentimento segue no Meu Pluggy."""
     uid = g.sessao["usuario_id"]
     anterior, _ = _credencial(uid)
+    _desligar_webhook(uid, anterior)
     with cursor(commit=True) as cur:
         cur.execute("DELETE FROM credenciais_pluggy WHERE usuario_id = %s", (uid,))
     if anterior:
@@ -1575,13 +1754,29 @@ def importar_openfinance():
         desde = date.fromisoformat(str((request.get_json(silent=True) or {}).get("desde")))
     except ValueError:
         return erro("Data inicial inválida.")
-    hoje = date.today()
-    if desde > hoje:
+    if desde > date.today():
         return erro("A data inicial não pode ser no futuro.")
+    if not _conexoes(uid):
+        return erro("Nenhuma conexão cadastrada.")
 
+    resultado, aviso = importar_para(uid, desde)
+    if aviso:
+        return erro(aviso, 502)
+    resultado.pop("_novas", None)
+    return jsonify(resultado)
+
+
+def importar_para(uid, desde):
+    """A importação em si, fora da rota: a tela chama pela rota acima, e o
+    webhook da Pluggy (notificações) chama direto, sem sessão.
+
+    @return (resultado, aviso). `resultado["_novas"]` são as linhas que
+            entraram agora (para notificar), e não vai para a resposta.
+    """
+    hoje = date.today()
     conexoes = _conexoes(uid)
     if not conexoes:
-        return erro("Nenhuma conexão cadastrada.")
+        return None, "Nenhuma conexão cadastrada."
 
     # Importado antes de existir conexao_id fica sem saber de que banco
     # veio, e o cadeado da conta não alcança. Uma vez só, a importação volta
@@ -1600,7 +1795,7 @@ def importar_openfinance():
         cred, [c["item_id"] for c in conexoes], desde
     )
     if aviso:
-        return erro(aviso, 502)
+        return None, aviso
 
     # Descarte que o usuário marcou como errado na conferência volta para a
     # soma: a regra continua achando que é movimento interno, mas a palavra
@@ -1668,15 +1863,16 @@ def importar_openfinance():
             (hoje, uid),
         )
 
-    novas = sum(1 for t in lista if t["origem_id"] not in existentes)
-    return jsonify({
+    novas = [t for t in lista if t["origem_id"] not in existentes]
+    return {
         "ok": True,
         "lidas": len(lista),
-        "novas": novas,
-        "jaExistiam": len(lista) - novas,
+        "novas": len(novas),
+        "jaExistiam": len(lista) - len(novas),
         "removidas": removidas,
         "ignoradas": ignoradas,
-    })
+        "_novas": novas,
+    }, None
 
 
 # ── Conferir números ─────────────────────────────────────────
@@ -2001,6 +2197,7 @@ _TABELAS_ESPERADAS = (
     "subtarefas", "conexoes_bancarias", "credenciais_pluggy", "regras_categoria",
     "aceites", "descartes", "passkeys", "desafios_webauthn",
     "espacos", "espaco_membros", "convites",
+    "push_inscricoes", "notif_preferencias", "webhooks_pluggy", "notificacoes_enviadas",
 )
 # Colunas acrescentadas depois que o banco da nuvem já existia (as mesmas
 # de ops/atualizar_banco.py).

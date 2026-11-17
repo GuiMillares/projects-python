@@ -159,3 +159,21 @@ PLUGGY_DIAS_PARCELAS = int(os.getenv("FIN_PLUGGY_DIAS_PARCELAS", "70"))
 # Teto de páginas por consulta, para uma conta com histórico enorme não
 # virar uma rajada de requests.
 PLUGGY_MAX_PAGINAS = int(os.getenv("FIN_PLUGGY_MAX_PAGINAS", "30"))
+
+# ── Notificações push (api/notificacoes.py) ──────────────────
+# Gere o par uma vez com `python ops/gerar_vapid.py`. A privada é segredo.
+VAPID_PUBLICA = os.getenv("FIN_VAPID_PUBLICA", "").strip()
+VAPID_PRIVADA = os.getenv("FIN_VAPID_PRIVADA", "").strip()
+# Contato que os serviços de push usam se algo der errado com os envios.
+VAPID_CONTATO = os.getenv("FIN_VAPID_CONTATO", "").strip() or (
+    f"mailto:{CONTROLADOR_CONTATO}" if "@" in CONTROLADOR_CONTATO else "https://meulastro.vercel.app"
+)
+
+# Endereço público do app: monta a URL do webhook que a Pluggy chama.
+# Na Vercel o api/index.py preenche; no PC não há webhook (a Pluggy não
+# chama localhost).
+URL_PUBLICA = os.getenv("FIN_URL_PUBLICA", "").strip().rstrip("/")
+
+# Segredo da rotina diária. A Vercel manda "Authorization: Bearer <valor>"
+# quando a variável CRON_SECRET existe no projeto.
+CRON_SEGREDO = os.getenv("CRON_SECRET", "").strip()

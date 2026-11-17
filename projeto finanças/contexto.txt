@@ -693,15 +693,32 @@ ESPAÇO, ENTREGA 2 (17/11/2026): visões e privacidade.
 * Celular: o tema segue o aparelho e o botão de tema some (classe
   fin-so-desktop); a escolha fixa fica em Configurações > Aparência.
 
+NOTIFICAÇÕES PUSH (17/11/2026): api/notificacoes.py.
+* Web Push com VAPID (pywebpush 2.5.0). Chaves: python ops/gerar_vapid.py
+  -> FIN_VAPID_PUBLICA e FIN_VAPID_PRIVADA na Vercel. Trocar o par
+  invalida todas as inscrições. Sem elas, nada é enviado.
+* Transações novas: webhook da Pluggy POR PESSOA (POST /webhooks com a
+  credencial dela, evento transactions/created, cabeçalho
+  X-Lastro-Segredo; no banco só o hash, tabela webhooks_pluggy). A
+  Pluggy não assina avisos. Rota /api/pluggy/webhook/<rota> roda a
+  importação normal (importar_para, separada da rota) e notifica só o
+  que entrou agora. O webhook é criado ao ligar notificações e refeito
+  ao trocar a credencial. A Pluggy quer 2XX em até 10 s; se passar, ela
+  repete depois e nada duplica.
+* Faturas: cron diário da Vercel (vercel.json "crons", 11h UTC = 8h BRT)
+  em /api/cron/diario, protegido por CRON_SECRET. Avisa com 3 dias, na
+  véspera e no dia, uma vez cada (notificacoes_enviadas). Também importa
+  a última semana de quem tem notificação, como rede de segurança.
+* Meu Pluggy atualiza a cada 24 h: o aviso de transação chega quando ele
+  sincroniza, não no segundo do Pix.
+* iPhone: push só com o app instalado na tela inicial (iOS 16.4+).
+* Front: sw.js (eventos push e notificationclick), pushService.js,
+  NotificacoesCard em Configurações. Documentos na VERSAO 2026-11-17.4.
+* 29 verificações com envio, Pluggy e importação falsos; cifra aes128gcm
+  e assinatura VAPID conferidas com chaves reais.
+
 Próximos passos, nesta ordem:
-1. Notificações push (pedido em 17/11): transações novas, entradas,
-   saídas e faturas vencendo. Plano: Web Push com VAPID (pywebpush),
-   webhook da Pluggy por pessoa (POST /webhooks com a credencial dela e um
-   cabeçalho secreto; a Pluggy não assina; responder 2XX em até 10 s;
-   proxy do Meu Pluggy recebe webhook na atualização de 24 h) e cron
-   diário da Vercel para faturas. iPhone só recebe push com o app
-   instalado na tela inicial (iOS 16.4+).
-2. Espaço, entrega 3: metas do espaço (todos mexem), investimentos,
+1. Espaço, entrega 3: metas do espaço (todos mexem), investimentos,
    saldos das contas de todos (cada um lido com a PRÓPRIA credencial
    Pluggy, no servidor) e orçamentos no Juntos.
 3. Backup do TiDB (ops/backup.py foi escrito para o MySQL local).

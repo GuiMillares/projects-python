@@ -384,3 +384,63 @@ CREATE TABLE IF NOT EXISTS convites (
   CONSTRAINT fk_convites_usado_por FOREIGN KEY (usado_por)
     REFERENCES usuarios (id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ── Notificações push (api/notificacoes.py) ─────────────────
+-- Cada aparelho que ativou as notificações. O endpoint é a "caixa postal"
+-- do aparelho no serviço de push do sistema (Apple, Google, Mozilla); as
+-- chaves cifram a mensagem de ponta a ponta. Fica o hash do endpoint como
+-- chave única porque ele passa de 255 caracteres.
+CREATE TABLE IF NOT EXISTS push_inscricoes (
+  id             INT UNSIGNED  NOT NULL AUTO_INCREMENT,
+  usuario_id     INT UNSIGNED  NOT NULL,
+  endpoint_hash  CHAR(64)      NOT NULL,
+  endpoint       VARCHAR(1000) NOT NULL,
+  p256dh         VARCHAR(200)  NOT NULL,
+  auth           VARCHAR(100)  NOT NULL,
+  aparelho       VARCHAR(80)   NOT NULL DEFAULT '',
+  criado_em      DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_push_endpoint (endpoint_hash),
+  KEY ix_push_usuario (usuario_id),
+  CONSTRAINT fk_push_usuario FOREIGN KEY (usuario_id)
+    REFERENCES usuarios (id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- O que a pessoa quer receber. Sem linha = tudo ligado.
+CREATE TABLE IF NOT EXISTS notif_preferencias (
+  usuario_id  INT UNSIGNED  NOT NULL,
+  entradas    TINYINT(1)    NOT NULL DEFAULT 1,
+  saidas      TINYINT(1)    NOT NULL DEFAULT 1,
+  faturas     TINYINT(1)    NOT NULL DEFAULT 1,
+  PRIMARY KEY (usuario_id),
+  CONSTRAINT fk_notif_pref_usuario FOREIGN KEY (usuario_id)
+    REFERENCES usuarios (id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Webhook da Pluggy de cada pessoa (criado com a credencial DELA). `rota`
+-- vai na URL e diz de quem é o aviso; o segredo vai num cabeçalho e aqui
+-- fica só o hash. A Pluggy não assina os avisos: é o segredo que prova a
+-- origem.
+CREATE TABLE IF NOT EXISTS webhooks_pluggy (
+  usuario_id    INT UNSIGNED  NOT NULL,
+  rota          CHAR(32)      NOT NULL,
+  segredo_hash  CHAR(64)      NOT NULL,
+  webhook_id    VARCHAR(64)   NULL,
+  client_id     CHAR(36)      NOT NULL,
+  criado_em     DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (usuario_id),
+  UNIQUE KEY uq_webhooks_rota (rota),
+  CONSTRAINT fk_webhooks_usuario FOREIGN KEY (usuario_id)
+    REFERENCES usuarios (id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Aviso que só pode sair uma vez (ex.: "fatura vence amanhã" daquele
+-- cartão naquele vencimento), mesmo com a rotina diária rodando de novo.
+CREATE TABLE IF NOT EXISTS notificacoes_enviadas (
+  usuario_id  INT UNSIGNED  NOT NULL,
+  chave       VARCHAR(160)  NOT NULL,
+  enviada_em  DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (usuario_id, chave),
+  CONSTRAINT fk_notif_env_usuario FOREIGN KEY (usuario_id)
+    REFERENCES usuarios (id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

@@ -843,3 +843,30 @@ def transacoes(cred, item_ids, desde: date) -> tuple[list[dict], dict, list[dict
         return [], ignorados, [], str(e)
     except Exception:  # noqa: BLE001
         return [], ignorados, [], "Não consegui ler as transações agora."
+
+
+# ── Webhook (notificações) ───────────────────────────────────
+# Um por aplicação da Pluggy, isto é, por pessoa (cada uma usa a própria).
+# A Pluggy não assina os avisos; o segredo vai num cabeçalho que ela repete
+# em cada chamada, e a nossa rota recusa quem não o trouxer.
+def criar_webhook(cred, url, segredo) -> tuple[str | None, str | None]:
+    """(id do webhook, aviso). Só o evento de transações novas."""
+    try:
+        r = _chamar(cred, "POST", "/webhooks", corpo={
+            "url": url,
+            "event": "transactions/created",
+            "headers": {"X-Lastro-Segredo": segredo},
+        })
+        return (str(r.get("id")) if r.get("id") else None), None
+    except _FalhaPluggy as e:
+        return None, str(e)
+
+
+def apagar_webhook(cred, webhook_id):
+    """Sem erro para fora: se já não existe lá, tanto faz."""
+    if not cred or not webhook_id:
+        return
+    try:
+        _chamar(cred, "DELETE", f"/webhooks/{webhook_id}")
+    except _FalhaPluggy:
+        pass

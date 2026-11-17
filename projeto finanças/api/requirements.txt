@@ -17,3 +17,7 @@ google-genai==2.18.1
 # Passkeys (Face ID / digital) em api/passkeys.py: confere as assinaturas
 # WebAuthn. Traz cbor2, pyOpenSSL e pyasn1 junto.
 webauthn==3.0.1
+
+# Notificações push (api/notificacoes.py): cifra e assina com VAPID cada
+# envio ao serviço de push do aparelho.
+pywebpush==2.5.0

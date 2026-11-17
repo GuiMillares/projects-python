@@ -32,6 +32,7 @@ import { Link } from "react-router-dom";
 import ApagarConta from "../components/ApagarConta";
 import CadastroNoCelular from "../components/CadastroNoCelular";
 import EspacoCard from "../components/EspacoCard";
+import NotificacoesCard from "../components/NotificacoesCard";
 import PasskeysCard from "../components/PasskeysCard";
 import { useTheme } from "../context/ThemeProvider";
 import { usePerfil } from "../context/PerfilProvider";
@@ -493,6 +494,8 @@ export default function Configuracoes() {
                 : "Fixo, não importa o tema do aparelho."}
             </p>
           </section>
+
+          <NotificacoesCard avisar={avisar} />
         </div>
 
         {/* ── Coluna 2: segurança ── */}

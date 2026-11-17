@@ -1398,6 +1398,20 @@ textarea {
   }
 }
 
+/* Opção de notificação: a caixa e o texto clicáveis juntos. */
+.fin-notif-opcao {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: 100%;
+  cursor: pointer;
+}
+
+.fin-notif-opcao input {
+  margin-top: 3px;
+  accent-color: var(--fin-accent);
+}
+
 /* Só no desktop (ex.: troca de tema, que no celular segue o aparelho). */
 @media (max-width: 899px) {
   .fin-so-desktop {
