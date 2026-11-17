@@ -19,17 +19,22 @@ import {
   Landmark,
   Link2,
   Loader2,
+  Lock,
   PiggyBank,
   Plug,
   RefreshCw,
   SearchCheck,
   Trash2,
+  Unlock,
+  Users,
   Wallet,
   X,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { PluggyConnect } from "react-pluggy-connect";
 import { useNavigate } from "react-router-dom";
+import SeletorVisao from "../components/SeletorVisao";
+import { useVisao } from "../context/VisaoProvider";
 import ConfirmarExclusao from "../components/ConfirmarExclusao";
 import { brl, dataCurta, rotuloMes } from "../services/financasService";
 import {
@@ -38,6 +43,7 @@ import {
   haQuanto,
   importarTransacoes,
   lerOpenFinance,
+  marcarContaPrivada,
   removerCredencial,
   resumoOpenFinance,
   salvarCredencial,
@@ -63,6 +69,9 @@ const COR_STATUS = {
 
 export default function Contas() {
   const navigate = useNavigate();
+  // No Juntos e na visão do par, as contas dos outros vêm só para ler: cada
+  // uma lida com a credencial Pluggy do dono dela, no servidor.
+  const { visao, temEspaco } = useVisao();
 
   const [resposta, setResposta] = useState(null);
   const [carregando, setCarregando] = useState(true);
@@ -95,7 +104,7 @@ export default function Contas() {
     async ({ silencioso = false } = {}) => {
       if (silencioso) setAtualizando(true);
       try {
-        const r = await lerOpenFinance();
+        const r = await lerOpenFinance(visao);
         setResposta(r);
         setDesde((d) => d || r.importarDesde);
         setFalha("");
@@ -110,7 +119,7 @@ export default function Contas() {
         setAtualizando(false);
       }
     },
-    [navigate],
+    [navigate, visao],
   );
 
   useEffect(() => {
@@ -118,6 +127,7 @@ export default function Contas() {
   }, [carregar]);
 
   const conexoes = resposta?.conexoes || [];
+  const minhas = conexoes.filter((c) => c.minha !== false);
   const algumSincronizando = conexoes.some((c) => c.dados?.status === "UPDATING");
 
   // Enquanto a Pluggy sincroniza, a tela relê sozinha até o status mudar.
@@ -206,7 +216,22 @@ export default function Contas() {
   };
 
   const sincronizarTudo = async () => {
-    await Promise.all(conexoes.map(sincronizarConexao));
+    await Promise.all(minhas.map(sincronizarConexao));
+  };
+
+  // Cadeado da conta inteira: privada some do Juntos com tudo o que veio dela.
+  const alternarPrivada = async (c) => {
+    try {
+      await marcarContaPrivada(c.id, !c.privada);
+      await carregar({ silencioso: true });
+      notificar(
+        c.privada
+          ? `${c.instituicao} volta a aparecer no espaço.`
+          : `${c.instituicao} agora é só sua: some do Juntos, com os lançamentos dela.`,
+      );
+    } catch (err) {
+      notificar(err.message, "error");
+    }
   };
 
   const remover = async () => {
@@ -269,7 +294,9 @@ export default function Contas() {
           <p className="fin-page-sub">Saldos e faturas pelo Open Finance</p>
         </div>
 
-        {conexoes.length > 0 && (
+        <SeletorVisao />
+
+        {minhas.length > 0 && (
           <div className="fin-form__actions">
             <button
               className="fin-btn fin-btn--ghost"
@@ -318,7 +345,7 @@ export default function Contas() {
       {/* Credencial ausente não vira banner: o próprio cartão de cadastro,
           logo abaixo, explica o que falta. */}
       {/* Sem conexão nenhuma, o guia mostra o aviso no passo certo. */}
-      {conexoes.length > 0 && !disponivel && credencial?.situacao !== "ausente" && (
+      {minhas.length > 0 && !disponivel && credencial?.situacao !== "ausente" && (
         <div className="fin-banner" style={{ "--bc": "var(--fin-warn)" }}>
           <CloudOff size={16} />
           <span>{resposta?.aviso}</span>
@@ -403,7 +430,7 @@ export default function Contas() {
       )}
 
       {/* ── Conexões ── */}
-      {conexoes.length === 0 ? (
+      {minhas.length === 0 && (visao === "eu" || conexoes.length === 0) ? (
         <PrimeirosPassos
           credencial={credencial}
           disponivel={disponivel}
@@ -427,6 +454,8 @@ export default function Contas() {
               onSincronizar={() => sincronizarConexao(c)}
               onReconectar={() => abrirWidget(c.id)}
               onRemover={() => setParaRemover(c)}
+              comEspaco={temEspaco}
+              onAlternarPrivada={() => alternarPrivada(c)}
             />
           ))}
 
@@ -969,8 +998,11 @@ function CredencialPluggy({ credencial, notificar, onMudou }) {
   );
 }
 
-function Conexao({ c, ocupado, onSincronizar, onReconectar, onRemover }) {
+function Conexao({ c, ocupado, onSincronizar, onReconectar, onRemover, comEspaco, onAlternarPrivada }) {
   const d = c.dados;
+  // Conta de outra pessoa do espaço: só leitura (sem sincronizar, remover
+  // nem reconectar, que usam a credencial dela).
+  const minha = c.minha !== false;
   const status = d?.status;
   const girando = ocupado || status === "UPDATING";
 
@@ -978,7 +1010,19 @@ function Conexao({ c, ocupado, onSincronizar, onReconectar, onRemover }) {
     <div className="fin-card fin-card--flush">
       <div className="fin-card__head fin-of-cab">
         <div style={{ minWidth: 0 }}>
-          <div className="fin-card__title">{c.instituicao}</div>
+          <div className="fin-card__title">
+            {c.instituicao}
+            {!minha && (
+              <span className="fin-tag fin-tag--dono" style={{ marginLeft: 8 }}>
+                <Users size={10} /> {c.donoNome}
+              </span>
+            )}
+            {minha && comEspaco && c.privada && (
+              <span className="fin-tag" style={{ marginLeft: 8 }} title="Fora do Juntos">
+                <Lock size={10} /> privada
+              </span>
+            )}
+          </div>
           <div className="fin-card__sub">
             {d ? (
               <>
@@ -992,7 +1036,18 @@ function Conexao({ c, ocupado, onSincronizar, onReconectar, onRemover }) {
             )}
           </div>
         </div>
+        {minha && (
         <div className="fin-of-cab__acoes">
+          {comEspaco && (
+            <button
+              className="fin-icon-btn"
+              onClick={onAlternarPrivada}
+              aria-label={c.privada ? `Compartilhar ${c.instituicao} com o espaço` : `Deixar ${c.instituicao} só para mim`}
+              title={c.privada ? "Privada: toque para compartilhar com o espaço" : "Compartilhada: toque para deixar só sua"}
+            >
+              {c.privada ? <Lock size={14} /> : <Unlock size={14} />}
+            </button>
+          )}
           <button
             className="fin-icon-btn"
             onClick={onSincronizar}
@@ -1011,6 +1066,7 @@ function Conexao({ c, ocupado, onSincronizar, onReconectar, onRemover }) {
             <Trash2 size={14} />
           </button>
         </div>
+        )}
       </div>
 
       {c.aviso && (
@@ -1020,7 +1076,7 @@ function Conexao({ c, ocupado, onSincronizar, onReconectar, onRemover }) {
         </div>
       )}
 
-      {status === "LOGIN_ERROR" && (
+      {minha && status === "LOGIN_ERROR" && (
         <div className="fin-banner fin-of-aviso" style={{ "--bc": "var(--fin-danger)" }}>
           <AlertTriangle size={16} />
           <span style={{ flex: 1 }}>O consentimento expirou ou foi revogado.</span>

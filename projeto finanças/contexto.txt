@@ -669,11 +669,38 @@ cria a conta pelo link e, ao entrar, responde "Vincular com Fulano?".
   4b dos termos; política cita o que os membros veem).
 * 30 verificações com usuários descartáveis (scratchpad, não versionado).
 
+ESPAÇO, ENTREGA 2 (17/11/2026): visões e privacidade.
+* api/visao.py é a regra: "eu" (tudo meu, com privado), <id> (o que o
+  membro compartilha) e "juntos". Fora da visão dos outros: lançamento
+  com privada=1 e tudo de conexão com privada=1. Escrita NÃO passa por lá:
+  as rotas de alterar/apagar seguem com usuario_id = quem pede.
+* transacoes.conexao_id: a importação grava de qual conexão veio (o
+  openfinance.transacoes leva item_id em cada linha). Importado antes
+  disso: a importação volta 1 ano uma vez para preencher. Desconectar uma
+  conta privada põe privada=1 nos lançamentos dela.
+* Pix entre membros: na visão com mais de uma pessoa, saída de um e
+  entrada do outro com mesmo valor em até 3 dias viram entreMembros e o
+  cliente tira da soma (contaveis).
+* /api/openfinance?visao= lê as conexões visíveis de cada membro com a
+  credencial Pluggy DO DONO. Importar continua só das próprias.
+* Front: VisaoProvider + SeletorVisao em Visão geral, Entradas/Saídas e
+  Contas. Linha do outro: nome, sem editar/apagar. Cadeado no editor do
+  lançamento e no cabeçalho da conta. Carteira de investimentos ainda só
+  no "eu" (entrega 3).
+* ops/atualizar_banco.py: o jeito de levar colunas novas ao TiDB (e ao
+  Laragon). Toda coluna nova entra no schema.sql E na lista dele.
+* 32 verificações de visão/privacidade com usuários descartáveis.
+* Celular: o tema segue o aparelho e o botão de tema some (classe
+  fin-so-desktop); a escolha fixa fica em Configurações > Aparência.
+
 Próximos passos, nesta ordem:
-1. Espaço, entrega 2: visões Eu / cada pessoa / Juntos em Visão geral,
-   Entradas e Saídas; cadeado por lançamento e por conta bancária
-   (privado não aparece nem soma); Pix entre membros fora da soma do
-   Juntos; quem lançou é o único que edita.
+1. Notificações push (pedido em 17/11): transações novas, entradas,
+   saídas e faturas vencendo. Plano: Web Push com VAPID (pywebpush),
+   webhook da Pluggy por pessoa (POST /webhooks com a credencial dela e um
+   cabeçalho secreto; a Pluggy não assina; responder 2XX em até 10 s;
+   proxy do Meu Pluggy recebe webhook na atualização de 24 h) e cron
+   diário da Vercel para faturas. iPhone só recebe push com o app
+   instalado na tela inicial (iOS 16.4+).
 2. Espaço, entrega 3: metas do espaço (todos mexem), investimentos,
    saldos das contas de todos (cada um lido com a PRÓPRIA credencial
    Pluggy, no servidor) e orçamentos no Juntos.

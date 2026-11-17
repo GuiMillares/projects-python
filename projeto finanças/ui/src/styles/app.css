@@ -1366,6 +1366,45 @@ textarea {
   color: var(--fin-accent);
 }
 
+/* ── Espaço compartilhado: visões e donos ── */
+/* De quem é a linha (lançamento ou conta de outra pessoa do espaço). */
+.fin-tag--dono {
+  border-color: var(--fin-accent-mid);
+  color: var(--fin-accent);
+}
+
+/* Linha de outra pessoa: não abre editor, mas não deve parecer apagada. */
+.fin-lanc-item__abrir:disabled {
+  cursor: default;
+  opacity: 1;
+  color: inherit;
+}
+
+/* O seletor Eu / Par / Juntos divide o cabeçalho com os botões; no
+   celular ele desce para a linha de baixo, inteiro. */
+.fin-visao {
+  flex-wrap: wrap;
+}
+
+@media (max-width: 899px) {
+  .fin-page-head .fin-visao {
+    order: 10;
+    width: 100%;
+  }
+
+  .fin-page-head .fin-visao button {
+    flex: 1;
+    justify-content: center;
+  }
+}
+
+/* Só no desktop (ex.: troca de tema, que no celular segue o aparelho). */
+@media (max-width: 899px) {
+  .fin-so-desktop {
+    display: none !important;
+  }
+}
+
 /* Convite de instalação: coisa de celular, some no desktop. */
 .fin-instalar {
   color: var(--fin-text);

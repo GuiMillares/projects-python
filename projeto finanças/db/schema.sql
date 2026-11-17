@@ -98,9 +98,16 @@ CREATE TABLE IF NOT EXISTS transacoes (
   -- lançada à mão. A chave única é o que deixa reimportar o mesmo período
   -- sem duplicar (o MySQL aceita vários NULL numa UNIQUE).
   origem_id   VARCHAR(64)     NULL,
+  -- De qual conexão bancária veio (importadas). Sem FK de propósito: ao
+  -- desconectar, os lançamentos ficam, e se a conexão era privada eles
+  -- viram privados antes (ver desconectar em app.py).
+  conexao_id  INT UNSIGNED    NULL,
+  -- Cadeado: privado não aparece para o espaço nem entra no Juntos.
+  privada     TINYINT(1)      NOT NULL DEFAULT 0,
   criado_em   DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
   UNIQUE KEY uq_transacoes_origem (usuario_id, origem_id),
+  KEY ix_transacoes_conexao (conexao_id),
   -- O dashboard sempre filtra por usuário + faixa de data: este é o
   -- índice que serve praticamente todas as consultas dele.
   KEY ix_transacoes_usuario_data (usuario_id, data),
@@ -208,6 +215,8 @@ CREATE TABLE IF NOT EXISTS conexoes_bancarias (
   -- Até onde a última importação de transações foi. A próxima sugere
   -- começar um pouco antes daqui, e não do começo de tudo.
   importado_ate      DATE          NULL,
+  -- Conta inteira fora da visão do espaço (e tudo o que vem dela).
+  privada            TINYINT(1)    NOT NULL DEFAULT 0,
   criado_em          DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
   UNIQUE KEY uq_conexoes_item (usuario_id, item_id),

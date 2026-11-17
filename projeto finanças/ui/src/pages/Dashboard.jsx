@@ -15,6 +15,8 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import SeletorVisao from "../components/SeletorVisao";
+import { useVisao } from "../context/VisaoProvider";
 import { BarChart, DonutChart, EmptyChart, LineChart } from "../components/Charts";
 import { criarMapaDeCores } from "../services/cores";
 import {
@@ -76,6 +78,9 @@ const TEXTO_SYNC = {
 
 export default function Dashboard() {
   const navigate = useNavigate();
+  // Eu / uma pessoa do espaço / Juntos. Cada troca relê tudo do servidor,
+  // que é quem decide o que cada visão pode mostrar.
+  const { visao } = useVisao();
   const [transacoes, setTransacoes] = useState([]);
   const [orcamentos, setOrcamentos] = useState({});
   const [carregando, setCarregando] = useState(true);
@@ -99,9 +104,9 @@ export default function Dashboard() {
     (async () => {
       try {
         const [ts, orc, sit] = await Promise.all([
-          listarTransacoes(),
+          listarTransacoes(visao),
           carregarOrcamentos(),
-          situacaoOpenFinance().catch(() => ({ conexoes: 0 })),
+          situacaoOpenFinance(visao).catch(() => ({ conexoes: 0 })),
         ]);
         setTransacoes(contaveis(ts));
         setOrcamentos(orc || {});
@@ -119,7 +124,7 @@ export default function Dashboard() {
         setCarregando(false);
       }
     })();
-  }, [navigate]);
+  }, [navigate, visao]);
 
   useEffect(() => {
     let viva = true;
@@ -127,7 +132,8 @@ export default function Dashboard() {
     (async () => {
       try {
         setSync("lendo");
-        const r = await lerOpenFinance();
+        setOpenFinance(null);
+        const r = await lerOpenFinance(visao);
         if (!viva) return;
         setOpenFinance(r);
         if (!r.conexoes?.length) {
@@ -135,10 +141,14 @@ export default function Dashboard() {
           return;
         }
         setSync("importando");
-        const importacao = await importarSeFaltar(r);
+        // Importar é só das PRÓPRIAS conexões: as do par entram pela conta dele.
+        const importacao = await importarSeFaltar({
+          ...r,
+          conexoes: (r.conexoes || []).filter((c) => c.minha !== false),
+        });
         if (!viva) return;
         if (importacao?.novas > 0 || importacao?.removidas > 0) {
-          setTransacoes(contaveis(await listarTransacoes()));
+          setTransacoes(contaveis(await listarTransacoes(visao)));
         }
         if (viva) setSync("ok");
       } catch (e) {
@@ -147,14 +157,18 @@ export default function Dashboard() {
       }
     })();
 
-    listarInvestimentos()
+    // A carteira ainda é só de quem vê (o Juntos dos investimentos é a
+    // entrega 3): fora do "eu", fica fora do patrimônio para não somar só
+    // a metade.
+    if (visao !== "eu") setCarteira([]);
+    else listarInvestimentos()
       .then((r) => viva && setCarteira((r.itens || []).map(calcularPosicao)))
       .catch((e) => console.error("Falha ao ler a carteira:", e));
 
     return () => {
       viva = false;
     };
-  }, []);
+  }, [visao]);
 
   const hoje = useMemo(() => new Date(), []);
   const mesAtual = chaveMes(hoje);
@@ -536,6 +550,7 @@ function CabecalhoPagina({ hoje, sync }) {
           {mes.charAt(0).toUpperCase() + mes.slice(1)} · {TEXTO_SYNC[sync] || "atualizado agora"}
         </p>
       </div>
+      <SeletorVisao />
     </div>
   );
 }

@@ -6,10 +6,18 @@ import { api } from "./api";
  * Cada conexão vem com `dados` (ou nulo) e o próprio `aviso`: uma conexão
  * fora do ar não impede as outras de aparecer.
  */
-export const lerOpenFinance = () => api.get("/api/openfinance");
+const comVisao = (caminho, visao) =>
+  visao && visao !== "eu" ? `${caminho}?visao=${encodeURIComponent(visao)}` : caminho;
+
+export const lerOpenFinance = (visao = "eu") => api.get(comVisao("/api/openfinance", visao));
 
 // Rápida (banco local): quantas conexões a pessoa tem. Ver Dashboard.
-export const situacaoOpenFinance = () => api.get("/api/openfinance/situacao");
+export const situacaoOpenFinance = (visao = "eu") =>
+  api.get(comVisao("/api/openfinance/situacao", visao));
+
+// Cadeado da conta inteira: privada some da visão do espaço.
+export const marcarContaPrivada = (id, privada) =>
+  api.patch(`/api/openfinance/conexoes/${id}`, { privada });
 
 /** Token do widget Pluggy Connect. Com `conexaoId`, abre para reconectar. */
 export const tokenDoWidget = (conexaoId) =>

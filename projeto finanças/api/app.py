@@ -29,6 +29,7 @@ import espacos
 import openfinance
 import passkeys
 import seguranca
+import visao
 from db import buscar_todos, buscar_um, cursor
 
 app = Flask(__name__)
@@ -646,6 +647,22 @@ def _serializar(t):
     }
 
 
+def _serializar_visao(t, eu):
+    """Linha vista por `eu`: diz de quem é e, se for dele, o cadeado.
+    Do outro só chega o que já é compartilhado, então o cadeado dele nem
+    viaja (seria sempre falso)."""
+    s = _serializar(t)
+    minha = t["usuario_id"] == eu
+    s["dono"] = t["usuario_id"]
+    s["minha"] = minha
+    if minha:
+        s["privada"] = bool(t.get("privada"))
+        s["privadaPelaConta"] = bool(t.get("conexao_privada"))
+    if t.get("entre_membros"):
+        s["entreMembros"] = True
+    return s
+
+
 @app.get("/api/transacoes")
 @exige_sessao()
 def listar_transacoes():
@@ -655,12 +672,22 @@ def listar_transacoes():
     num app pessoal, e o dashboard precisa do histórico inteiro para o
     saldo acumulado bater.
     """
-    linhas = buscar_todos(
-        "SELECT id, data, nome, valor, natureza, categoria, recorrencia, origem_id, "
-        "ignorada, meio FROM transacoes WHERE usuario_id = %s ORDER BY data, id",
-        (g.sessao["usuario_id"],),
-    )
-    return jsonify([_serializar(t) for t in linhas])
+    eu = g.sessao["usuario_id"]
+    try:
+        linhas = visao.transacoes(eu, request.args.get("visao"))
+    except visao.VisaoInvalida as e:
+        return erro(str(e), 404)
+    return jsonify([_serializar_visao(t, eu) for t in linhas])
+
+
+@app.get("/api/visao")
+@exige_sessao()
+def visao_membros():
+    """Quem aparece no seletor de visão: a pessoa e os membros do espaço."""
+    eu = g.sessao["usuario_id"]
+    return jsonify({
+        "membros": [{**m, "eu": m["id"] == eu} for m in visao.membros(eu)],
+    })
 
 
 @app.post("/api/transacoes")
@@ -709,6 +736,9 @@ def editar_transacao(transacao_id):
             return erro("Informe a categoria.")
         campos += ["categoria = %s", "categoria_manual = 1"]
         valores.append(categoria)
+    if "privada" in d:
+        campos.append("privada = %s")
+        valores.append(1 if d.get("privada") else 0)
     if "ignorada" in d:
         campos.append("ignorada = %s")
         valores.append(1 if d.get("ignorada") else 0)
@@ -1237,7 +1267,7 @@ def _conexoes(usuario_id):
 
 def _conexao_do_usuario(conexao_id, usuario_id):
     return buscar_um(
-        "SELECT id, item_id FROM conexoes_bancarias WHERE id = %s AND usuario_id = %s",
+        "SELECT id, item_id, privada FROM conexoes_bancarias WHERE id = %s AND usuario_id = %s",
         (conexao_id, usuario_id),
     )
 
@@ -1287,9 +1317,16 @@ def situacao_openfinance():
     """Rápida, só banco local: quantas conexões a pessoa tem. A tela inicial
     usa para saber, antes de a Pluggy responder, que o saldo virá dos bancos
     e não deve ser calculado pelos lançamentos enquanto isso."""
+    eu = g.sessao["usuario_id"]
+    try:
+        ids = visao.ids_da_visao(eu, request.args.get("visao"))
+    except visao.VisaoInvalida as e:
+        return erro(str(e), 404)
+    marcadores = ", ".join(["%s"] * len(ids))
     n = buscar_um(
-        "SELECT COUNT(*) AS n FROM conexoes_bancarias WHERE usuario_id = %s",
-        (g.sessao["usuario_id"],),
+        f"SELECT COUNT(*) AS n FROM conexoes_bancarias WHERE usuario_id IN ({marcadores}) "
+        "AND (usuario_id = %s OR privada = 0)",
+        (*ids, eu),
     )["n"]
     return jsonify({"conexoes": int(n)})
 
@@ -1302,17 +1339,43 @@ def ler_openfinance():
     Uma conexão que falha não derruba as outras: ela volta com `dados` nulo
     e o próprio `aviso`, e a tela mostra o resto.
     """
-    conexoes = _conexoes(g.sessao["usuario_id"])
-    cred, info = _credencial(g.sessao["usuario_id"])
+    eu = g.sessao["usuario_id"]
+    try:
+        ids = visao.ids_da_visao(eu, request.args.get("visao"))
+    except visao.VisaoInvalida as e:
+        return erro(str(e), 404)
+    cred, info = _credencial(eu)
+    nomes = {m["id"]: m["nome"] for m in visao.membros(eu)}
+
+    # As suas, todas; as dos outros membros, só as sem cadeado. Cada uma é
+    # lida com a credencial Pluggy DO DONO dela: ninguém usa a de outro.
+    marcadores = ", ".join(["%s"] * len(ids))
+    conexoes = buscar_todos(
+        "SELECT id, usuario_id, item_id, instituicao, importado_ate, privada "
+        f"  FROM conexoes_bancarias WHERE usuario_id IN ({marcadores}) "
+        "   AND (usuario_id = %s OR privada = 0) ORDER BY usuario_id <> %s, id",
+        (*ids, eu, eu),
+    )
+    credenciais = {eu: cred}
+    for dono in {c["usuario_id"] for c in conexoes} - {eu}:
+        credenciais[dono] = _credencial(dono)[0]
 
     # Conexões lidas em paralelo (cada uma também paraleliza por dentro).
     # A ordem da resposta segue a da lista.
-    with ThreadPoolExecutor(max_workers=max(1, min(5, len(conexoes)))) as ex:
-        lidas = list(ex.map(lambda c: openfinance.panorama(cred, c["item_id"]), conexoes))
+    with ThreadPoolExecutor(max_workers=max(1, min(6, len(conexoes)))) as ex:
+        lidas = list(ex.map(
+            lambda c: openfinance.panorama(credenciais.get(c["usuario_id"]), c["item_id"]),
+            conexoes,
+        ))
 
     saida = []
     for c, (dados, aviso) in zip(conexoes, lidas):
+        minha = c["usuario_id"] == eu
         saida.append({
+            "dono": c["usuario_id"],
+            "donoNome": nomes.get(c["usuario_id"], ""),
+            "minha": minha,
+            "privada": bool(c["privada"]) if minha else False,
             "id": c["id"],
             "itemId": c["item_id"],
             "instituicao": (dados or {}).get("instituicao") or c["instituicao"] or "Conexão",
@@ -1327,8 +1390,9 @@ def ler_openfinance():
     # data da compra. Com uma semana só, ela caía fora da janela para
     # sempre. A chave única barra o repetido.
     hoje = date.today()
-    ultimas = [c["importado_ate"] for c in conexoes if c["importado_ate"]]
-    if conexoes and len(ultimas) == len(conexoes):
+    minhas = [c for c in conexoes if c["usuario_id"] == eu]
+    ultimas = [c["importado_ate"] for c in minhas if c["importado_ate"]]
+    if minhas and len(ultimas) == len(minhas):
         desde = min(ultimas) - timedelta(days=35)
     else:
         desde = hoje - timedelta(days=365)
@@ -1445,6 +1509,13 @@ def apagar_conexao(conexao_id):
         return erro("Conexão não encontrada.", 404)
 
     with cursor(commit=True) as cur:
+        # Conta com cadeado: sem a conexão, o cadeado dela deixaria de valer
+        # para os lançamentos que vieram de lá. Cada um ganha o próprio.
+        if conexao.get("privada"):
+            cur.execute(
+                "UPDATE transacoes SET privada = 1 WHERE conexao_id = %s AND usuario_id = %s",
+                (conexao_id, g.sessao["usuario_id"]),
+            )
         cur.execute(
             "DELETE FROM conexoes_bancarias WHERE id = %s AND usuario_id = %s",
             (conexao_id, g.sessao["usuario_id"]),
@@ -1453,6 +1524,24 @@ def apagar_conexao(conexao_id):
     if cred:
         openfinance.esquecer(cred, conexao["item_id"])
     return jsonify({"ok": True})
+
+
+@app.patch("/api/openfinance/conexoes/<int:conexao_id>")
+@exige_sessao()
+def editar_conexao(conexao_id):
+    """Cadeado da conta inteira: privada some da visão do espaço, com tudo
+    o que foi importado dela."""
+    d = request.get_json(silent=True) or {}
+    if "privada" not in d:
+        return erro("Nada para alterar.")
+    if not _conexao_do_usuario(conexao_id, g.sessao["usuario_id"]):
+        return erro("Conexão não encontrada.", 404)
+    with cursor(commit=True) as cur:
+        cur.execute(
+            "UPDATE conexoes_bancarias SET privada = %s WHERE id = %s AND usuario_id = %s",
+            (1 if d.get("privada") else 0, conexao_id, g.sessao["usuario_id"]),
+        )
+    return jsonify({"ok": True, "privada": bool(d.get("privada"))})
 
 
 @app.post("/api/openfinance/conexoes/<int:conexao_id>/atualizar")
@@ -1493,6 +1582,18 @@ def importar_openfinance():
     conexoes = _conexoes(uid)
     if not conexoes:
         return erro("Nenhuma conexão cadastrada.")
+
+    # Importado antes de existir conexao_id fica sem saber de que banco
+    # veio, e o cadeado da conta não alcança. Uma vez só, a importação volta
+    # um ano para preencher (o upsert grava a conexão nas linhas que já
+    # existem).
+    if buscar_um(
+        "SELECT 1 AS x FROM transacoes WHERE usuario_id = %s AND origem_id IS NOT NULL "
+        "AND conexao_id IS NULL LIMIT 1",
+        (uid,),
+    ):
+        desde = min(desde, hoje - timedelta(days=365))
+    por_item = {c["item_id"]: c["id"] for c in conexoes}
 
     cred, _ = _credencial(uid)
     lista, ignoradas, descartados, aviso = openfinance.transacoes(
@@ -1545,11 +1646,12 @@ def importar_openfinance():
             # podem ter sido editados pelo usuário e ficam como estão.
             cur.executemany(
                 "INSERT INTO transacoes (usuario_id, data, nome, valor, natureza, "
-                "categoria, recorrencia, meio, origem_id) "
-                "VALUES (%s, %s, %s, %s, %s, %s, 'unica', %s, %s) "
-                "ON DUPLICATE KEY UPDATE meio = VALUES(meio)",
+                "categoria, recorrencia, meio, origem_id, conexao_id) "
+                "VALUES (%s, %s, %s, %s, %s, %s, 'unica', %s, %s, %s) "
+                "ON DUPLICATE KEY UPDATE meio = VALUES(meio), "
+                "conexao_id = COALESCE(VALUES(conexao_id), conexao_id)",
                 [(uid, t["data"], t["nome"], t["valor"], t["natureza"], t["categoria"],
-                  t["meio"], t["origem_id"]) for t in lista],
+                  t["meio"], t["origem_id"], por_item.get(t.get("item_id"))) for t in lista],
             )
         # O que a regra atual descarta sai do banco mesmo que uma importação
         # de antes da regra tenha deixado entrar. Só toca linha importada.
@@ -1584,7 +1686,7 @@ def importar_openfinance():
 # outra. O usuário marca cada um como certo ou errado, e a taxa de acerto
 # sai daí.
 MOTIVOS_CONFERIDOS = ("pagamentoFatura", "transferencias")
-CAMPOS_LANCAMENTO = ("origem_id", "data", "nome", "valor", "natureza", "categoria", "meio")
+CAMPOS_LANCAMENTO = ("origem_id", "data", "nome", "valor", "natureza", "categoria", "meio", "item_id")
 
 # A mesma folga da regra de pares (openfinance._FOLGA_PAR_DIAS): é o tempo
 # que um movimento interno leva para aparecer dos dois lados.
@@ -1900,6 +2002,13 @@ _TABELAS_ESPERADAS = (
     "aceites", "descartes", "passkeys", "desafios_webauthn",
     "espacos", "espaco_membros", "convites",
 )
+# Colunas acrescentadas depois que o banco da nuvem já existia (as mesmas
+# de ops/atualizar_banco.py).
+_COLUNAS_ESPERADAS = (
+    ("transacoes", "conexao_id"),
+    ("transacoes", "privada"),
+    ("conexoes_bancarias", "privada"),
+)
 
 
 @app.get("/api/saude")
@@ -1915,7 +2024,22 @@ def saude():
         )
     }
     faltando = [t for t in _TABELAS_ESPERADAS if t not in existentes]
-    return jsonify({"ok": not faltando, "banco": config.DB_NAME, "tabelasFaltando": faltando})
+    colunas = {
+        (r["TABLE_NAME"], r["COLUMN_NAME"])
+        for r in buscar_todos(
+            "SELECT TABLE_NAME, COLUMN_NAME FROM information_schema.COLUMNS "
+            "WHERE TABLE_SCHEMA = %s",
+            (config.DB_NAME,),
+        )
+    }
+    colunas_faltando = [f"{t}.{c}" for t, c in _COLUNAS_ESPERADAS if (t, c) not in colunas]
+    return jsonify({
+        "ok": not faltando and not colunas_faltando,
+        "banco": config.DB_NAME,
+        "tabelasFaltando": faltando,
+        "colunasFaltando": colunas_faltando,
+        "comoCorrigir": "python ops/atualizar_banco.py" if faltando or colunas_faltando else None,
+    })
 
 
 def _porta_ocupada(host: str, porta: int) -> bool:

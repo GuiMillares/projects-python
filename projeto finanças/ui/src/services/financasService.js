@@ -35,10 +35,19 @@ export const normalizarTransacao = (t, i = 0) => ({
   importada: Boolean(t.importada),
   ignorada: Boolean(t.ignorada),
   meio: t.meio || null,
+  // Espaço compartilhado (api/visao.py): de quem é e os cadeados. Linha
+  // sem `minha` (dado antigo, teste) conta como da própria pessoa.
+  dono: t.dono ?? null,
+  minha: t.minha !== false,
+  privada: Boolean(t.privada),
+  privadaPelaConta: Boolean(t.privadaPelaConta),
+  entreMembros: Boolean(t.entreMembros),
 });
 
-/** O que entra nas contas: tudo menos o marcado como "não conta". */
-export const contaveis = (transacoes) => transacoes.filter((t) => !t.ignorada);
+/** O que entra nas contas: tudo menos o marcado como "não conta" e, no
+ * Juntos, o Pix de um membro para o outro (dinheiro trocando de mão dentro
+ * de casa não é gasto nem renda de vocês). */
+export const contaveis = (transacoes) => transacoes.filter((t) => !t.ignorada && !t.entreMembros);
 
 // ── Datas ────────────────────────────────────────────────────────────────────
 export const chaveMes = (d) =>
@@ -226,8 +235,11 @@ export function pontosDeAtencao(transacoes, orcamentos, hoje = new Date(), janel
 // ── Acesso à API ─────────────────────────────────────────────────────────────
 import { api } from "./api";
 
-export async function listarTransacoes() {
-  const linhas = await api.get("/api/transacoes");
+const comVisao = (caminho, visao) =>
+  visao && visao !== "eu" ? `${caminho}?visao=${encodeURIComponent(visao)}` : caminho;
+
+export async function listarTransacoes(visao = "eu") {
+  const linhas = await api.get(comVisao("/api/transacoes", visao));
   return linhas.map(normalizarTransacao);
 }
 

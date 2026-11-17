@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import AppLayout from "./components/AppLayout";
 import { PerfilProvider } from "./context/PerfilProvider";
+import { VisaoProvider } from "./context/VisaoProvider";
 import Aceite from "./pages/Aceite";
 import Configuracoes from "./pages/Configuracoes";
 import Conferir from "./pages/Conferir";
@@ -51,6 +52,7 @@ export default function App() {
         element={
           <ExigeSessao>
             <PerfilProvider>
+              <VisaoProvider>
               <AppLayout>
                 <Routes>
                   <Route index element={<Dashboard />} />
@@ -75,6 +77,7 @@ export default function App() {
                   <Route path="*" element={<Navigate to="/app" replace />} />
                 </Routes>
               </AppLayout>
+              </VisaoProvider>
             </PerfilProvider>
           </ExigeSessao>
         }

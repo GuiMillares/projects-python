@@ -18,11 +18,15 @@ import {
   Check,
   Loader2,
   Plus,
+  Lock,
   Repeat,
+  Users,
   Trash2,
   X,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import SeletorVisao from "../components/SeletorVisao";
+import { useVisao } from "../context/VisaoProvider";
 import { useNavigate } from "react-router-dom";
 import ConfirmarExclusao from "../components/ConfirmarExclusao";
 import { criarMapaDeCores } from "../services/cores";
@@ -78,6 +82,10 @@ const formularioVazio = () => ({
 export default function Lancamentos({ natureza }) {
   const navigate = useNavigate();
   const perfil = PERFIS[natureza];
+  // Eu / uma pessoa / Juntos. No Juntos e na visão do par, as linhas dos
+  // outros chegam sem editar nem apagar: cada um mexe só no que é seu.
+  const { visao, nomeDe, temEspaco } = useVisao();
+  const vendoOutro = visao !== "eu" && visao !== "juntos";
 
   const [transacoes, setTransacoes] = useState([]);
   const [carregando, setCarregando] = useState(true);
@@ -100,7 +108,7 @@ export default function Lancamentos({ natureza }) {
 
   const carregar = async () => {
     try {
-      setTransacoes(await listarTransacoes());
+      setTransacoes(await listarTransacoes(visao));
       setFalha("");
     } catch (e) {
       if (e.status === 401 || e.status === 403) {
@@ -116,7 +124,7 @@ export default function Lancamentos({ natureza }) {
   useEffect(() => {
     carregar();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [natureza]);
+  }, [natureza, visao]);
 
   // Ao trocar de aba o formulário aberto e o mês escolhido não fazem mais
   // sentido: são de outro contexto.
@@ -201,7 +209,7 @@ export default function Lancamentos({ natureza }) {
    * próximas importações. A troca deste lançamento vai sempre à parte,
    * porque um lançamento manual não é alcançado pela regra.
    */
-  const salvarEdicao = async (t, { categoria, ignorada, regra, padrao }) => {
+  const salvarEdicao = async (t, { categoria, ignorada, privada, regra, padrao }) => {
     try {
       let aplicadas = 0;
       if (regra && categoria !== t.categoria) {
@@ -210,6 +218,7 @@ export default function Lancamentos({ natureza }) {
       const campos = {};
       if (categoria !== t.categoria) campos.categoria = categoria;
       if (ignorada !== t.ignorada) campos.ignorada = ignorada;
+      if (privada !== undefined && privada !== t.privada) campos.privada = privada;
       if (Object.keys(campos).length) await editarTransacao(t.id, campos);
 
       setEditando(null);
@@ -261,20 +270,27 @@ export default function Lancamentos({ natureza }) {
           <p className="fin-page-sub">{perfil.subtitulo}</p>
         </div>
 
-        <button
-          className={`fin-btn fin-btn--${formAberto ? "ghost" : "primary"}`}
-          onClick={() => setFormAberto((v) => !v)}
-        >
-          {formAberto ? (
-            <>
-              <X size={14} /> Cancelar
-            </>
-          ) : (
-            <>
-              <Plus size={14} /> {perfil.rotuloNovo}
-            </>
+        <div className="fin-form__actions">
+          <SeletorVisao />
+          {/* Lançamento novo é sempre de quem lança: na visão do par ele
+              não apareceria na lista, então o botão some ali. */}
+          {!vendoOutro && (
+            <button
+              className={`fin-btn fin-btn--${formAberto ? "ghost" : "primary"}`}
+              onClick={() => setFormAberto((v) => !v)}
+            >
+              {formAberto ? (
+                <>
+                  <X size={14} /> Cancelar
+                </>
+              ) : (
+                <>
+                  <Plus size={14} /> {perfil.rotuloNovo}
+                </>
+              )}
+            </button>
           )}
-        </button>
+        </div>
       </div>
 
       {falha && (
@@ -458,9 +474,10 @@ export default function Lancamentos({ natureza }) {
                   <button
                     type="button"
                     className="fin-lanc-item__info fin-lanc-item__abrir"
-                    onClick={() => setEditando(editando === t.id ? null : t.id)}
+                    onClick={() => t.minha && setEditando(editando === t.id ? null : t.id)}
                     aria-expanded={editando === t.id}
-                    title="Editar categoria ou tirar da conta"
+                    disabled={!t.minha}
+                    title={t.minha ? "Editar categoria, cadeado ou tirar da conta" : `Lançamento de ${nomeDe(t.dono)}`}
                   >
                     <span className="fin-lanc-item__nome">{t.nome}</span>
                     <span className="fin-lanc-item__meta">
@@ -469,6 +486,21 @@ export default function Lancamentos({ natureza }) {
                         style={{ background: dados.corDaCategoria(t.categoria) }}
                       />
                       {t.categoria}
+                      {!t.minha && (
+                        <span className="fin-tag fin-tag--dono">
+                          <Users size={10} /> {nomeDe(t.dono)}
+                        </span>
+                      )}
+                      {t.minha && temEspaco && (t.privada || t.privadaPelaConta) && (
+                        <span className="fin-tag" title={t.privadaPelaConta ? "A conta de onde veio está privada" : "Só você vê"}>
+                          <Lock size={10} /> {t.privadaPelaConta && !t.privada ? "conta privada" : "privado"}
+                        </span>
+                      )}
+                      {t.entreMembros && (
+                        <span className="fin-tag" title="Pix entre vocês: fica fora da soma do Juntos">
+                          entre vocês
+                        </span>
+                      )}
                       {t.meio === "cartao" && <span className="fin-tag">cartão</span>}
                       {t.ignorada && <span className="fin-tag fin-tag--alerta">não conta</span>}
                       {t.recorrencia === "mensal" && (
@@ -483,20 +515,25 @@ export default function Lancamentos({ natureza }) {
                     {natureza === "receita" ? "+" : "−"} {brl(t.valor)}
                   </div>
 
-                  <button
-                    className="fin-lanc-item__excluir"
-                    onClick={() => setParaExcluir(t)}
-                    disabled={apagando === t.id}
-                    aria-label={`Excluir ${t.nome}`}
-                    title="Excluir"
-                  >
-                    <Trash2 size={14} />
-                  </button>
+                  {t.minha ? (
+                    <button
+                      className="fin-lanc-item__excluir"
+                      onClick={() => setParaExcluir(t)}
+                      disabled={apagando === t.id}
+                      aria-label={`Excluir ${t.nome}`}
+                      title="Excluir"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  ) : (
+                    <span className="fin-lanc-item__excluir" aria-hidden="true" />
+                  )}
                 </div>
 
                 {editando === t.id && (
                   <EditorLancamento
                     t={t}
+                    comEspaco={temEspaco}
                     categorias={dados.categorias}
                     onSalvar={(campos) => salvarEdicao(t, campos)}
                     onCancelar={() => setEditando(null)}
@@ -529,9 +566,10 @@ export default function Lancamentos({ natureza }) {
   );
 }
 
-function EditorLancamento({ t, categorias, onSalvar, onCancelar }) {
+function EditorLancamento({ t, comEspaco, categorias, onSalvar, onCancelar }) {
   const [categoria, setCategoria] = useState(t.categoria);
   const [ignorada, setIgnorada] = useState(t.ignorada);
+  const [privada, setPrivada] = useState(t.privada);
   // Regra só faz sentido para o que veio do banco: lançamento manual não
   // se repete sozinho na próxima importação.
   const [regra, setRegra] = useState(t.importada);
@@ -547,6 +585,7 @@ function EditorLancamento({ t, categorias, onSalvar, onCancelar }) {
     await onSalvar({
       categoria: categoria.trim() || t.categoria,
       ignorada,
+      privada: comEspaco ? privada : undefined,
       regra: regra && mudouCategoria && padrao.trim().length >= 3,
       padrao: padrao.trim(),
     });
@@ -599,6 +638,15 @@ function EditorLancamento({ t, categorias, onSalvar, onCancelar }) {
         <input type="checkbox" checked={ignorada} onChange={(e) => setIgnorada(e.target.checked)} />
         Não contar nos totais (dinheiro só de passagem, por exemplo)
       </label>
+
+      {/* Cadeado: só aparece para quem está num espaço compartilhado. */}
+      {comEspaco && (
+        <label className="fin-lanc-editor__linha">
+          <input type="checkbox" checked={privada} onChange={(e) => setPrivada(e.target.checked)} />
+          <Lock size={12} /> Privado: só eu vejo, e fica fora do Juntos
+          {t.privadaPelaConta && " (a conta de onde veio já está privada)"}
+        </label>
+      )}
 
       <div className="fin-form__actions" style={{ marginTop: 12 }}>
         <button className="fin-btn fin-btn--primary fin-btn--sm" disabled={salvando}>

@@ -124,8 +124,10 @@ export default function AppLayout({ children }) {
           </div>
 
           <div className="fin-topbar__right">
+            {/* No celular o tema segue o aparelho: o botão só existe no
+                desktop. A escolha fixa fica em Configurações > Aparência. */}
             <button
-              className="fin-icon-btn"
+              className="fin-icon-btn fin-so-desktop"
               onClick={toggleTheme}
               aria-label={escuro ? "Mudar para tema claro" : "Mudar para tema escuro"}
               title={escuro ? "Tema claro" : "Tema escuro"}
@@ -184,7 +186,7 @@ export default function AppLayout({ children }) {
                     <Settings size={14} /> Configurações
                   </button>
 
-                  <button className="fin-menu__item" role="menuitem" onClick={toggleTheme}>
+                  <button className="fin-menu__item fin-so-desktop" role="menuitem" onClick={toggleTheme}>
                     {escuro ? <Sun size={14} /> : <Moon size={14} />}
                     {escuro ? "Tema claro" : "Tema escuro"}
                   </button>

@@ -802,7 +802,12 @@ def transacoes(cred, item_ids, desde: date) -> tuple[list[dict], dict, list[dict
         return [], ignorados, [], sem_credencial()
 
     try:
-        contas = [c for i in item_ids for c in _todas(cred, "/accounts", {"itemId": i})]
+        # Cada conta leva o item (conexão) de onde veio: a importação grava
+        # isso em transacoes.conexao_id, e é o que faz o cadeado da conta
+        # valer para os lançamentos dela.
+        contas = [
+            {**c, "_item": i} for i in item_ids for c in _todas(cred, "/accounts", {"itemId": i})
+        ]
         tem_cartao = any(c.get("type") == "CREDIT" for c in contas)
 
         brutas = []
@@ -824,6 +829,7 @@ def transacoes(cred, item_ids, desde: date) -> tuple[list[dict], dict, list[dict
                     par = brutas[j][2].get("id") if j is not None else None
                     descartados.append({
                         **_lancamento(t, credito),
+                        "item_id": c["_item"],
                         "motivo": motivo,
                         "conta": _nome_conta(c)[:120],
                         "par": str(par)[:64] if par else None,
@@ -831,7 +837,7 @@ def transacoes(cred, item_ids, desde: date) -> tuple[list[dict], dict, list[dict
                 continue
             if not _data(t.get("date")) or not t.get("id"):
                 continue
-            saida.append(_lancamento(t, credito))
+            saida.append({**_lancamento(t, credito), "item_id": c["_item"]})
         return saida, ignorados, descartados, None
     except _FalhaPluggy as e:
         return [], ignorados, [], str(e)
