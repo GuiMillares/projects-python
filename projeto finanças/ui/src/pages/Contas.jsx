@@ -201,7 +201,16 @@ export default function Contas() {
   const sincronizarConexao = async (c) => {
     setSincronizando((s) => new Set(s).add(c.id));
     try {
-      await sincronizar(c.id);
+      const r = await sincronizar(c.id);
+      // Meu Pluggy: a busca no banco é dele, uma vez por dia. O servidor
+      // trouxe o que ele já tinha.
+      if (r?.meuPluggy) {
+        notificar(
+          r.novas
+            ? `${c.instituicao}: ${r.novas} ${r.novas === 1 ? "lançamento novo" : "lançamentos novos"}. O Meu Pluggy busca no banco uma vez por dia.`
+            : `${c.instituicao} já está em dia com o Meu Pluggy, que busca no banco uma vez por dia.`,
+        );
+      }
       releiturasRef.current = 0;
       await carregar({ silencioso: true });
     } catch (err) {

@@ -1908,8 +1908,16 @@ def atualizar_conexao(conexao_id):
     if not conexao:
         return erro("Conexão não encontrada.", 404)
 
-    cred, _ = _credencial(g.sessao["usuario_id"])
+    uid = g.sessao["usuario_id"]
+    cred, _ = _credencial(uid)
     aviso = openfinance.atualizar(cred, conexao["item_id"])
+    if aviso == openfinance.MEU_PLUGGY:
+        # Não dá para mandar buscar no banco agora; traz o que o Meu Pluggy
+        # já tem (a última semana, sem duplicar: ver importar_para).
+        resultado, aviso_imp = importar_para(uid, date.today() - timedelta(days=7))
+        if aviso_imp:
+            return erro(aviso_imp, 502)
+        return jsonify({"ok": True, "meuPluggy": True, "novas": resultado["novas"]})
     if aviso:
         return erro(aviso, 502)
     return jsonify({"ok": True})

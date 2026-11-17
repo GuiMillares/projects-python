@@ -532,8 +532,16 @@ def panorama(cred, item_id) -> tuple[dict | None, str | None]:
     return dados, None
 
 
+# Conexão do Meu Pluggy não aceita atualização pedida pela API: o próprio
+# Meu Pluggy busca no banco, uma vez por dia. A Pluggy responde 400 com
+# "MeuPluggy item cant be updated".
+MEU_PLUGGY = "meu_pluggy"
+
+
 def atualizar(cred, item_id) -> str | None:
-    """Pede à Pluggy que busque os dados no banco agora. Devolve o aviso."""
+    """Pede à Pluggy que busque os dados no banco agora. Devolve o aviso,
+    ou MEU_PLUGGY quando a conexão é do Meu Pluggy (não é erro: a busca no
+    banco é dele, e o que ele já tem segue disponível para ler)."""
     if not cred:
         return sem_credencial()
     if not ID_VALIDO.match(str(item_id or "")):
@@ -543,6 +551,8 @@ def atualizar(cred, item_id) -> str | None:
         _chamar(cred, "PATCH", f"/items/{item_id}", corpo={})
         return None
     except _FalhaPluggy as e:
+        if e.status == 400 and "meupluggy" in str(e).lower().replace(" ", ""):
+            return MEU_PLUGGY
         return str(e)
     except Exception:  # noqa: BLE001
         return "Não consegui pedir a atualização agora."
