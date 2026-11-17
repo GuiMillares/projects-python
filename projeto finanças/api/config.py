@@ -35,6 +35,15 @@ DB_USER = os.getenv("FIN_DB_USER", "root")
 DB_PASS = os.getenv("FIN_DB_PASS", "")
 DB_NAME = os.getenv("FIN_DB_NAME", "local_finance")
 
+# Banco na nuvem (produção na Vercel): conexão cifrada e com o certificado
+# do servidor conferido. No Laragon fica desligado.
+DB_SSL = os.getenv("FIN_DB_SSL", "").strip() == "1"
+
+# Deslocamento da sessão do MySQL, ex. "-03:00". Vazio = o padrão do
+# servidor. Na Vercel o api/index.py preenche, para o NOW() do banco
+# andar junto com o datetime.now() do Python.
+DB_FUSO = os.getenv("FIN_DB_FUSO", "").strip()
+
 # ── API ──────────────────────────────────────────────────────
 # 127.0.0.1 e não 0.0.0.0: o webview do Tauri roda na mesma
 # máquina, não há motivo para aceitar conexão de fora.

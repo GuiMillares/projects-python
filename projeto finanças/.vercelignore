@@ -1,0 +1,9 @@
+# O que nunca sobe para a Vercel, mesmo num deploy feito pela linha de
+# comando (que manda os arquivos do disco, não os do git).
+.env
+.env.*
+*.db
+ops/
+**/__pycache__/
+ui/node_modules/
+ui/dist/

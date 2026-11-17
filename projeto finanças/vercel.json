@@ -1,0 +1,46 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "builds": [
+    {
+      "src": "api/index.py",
+      "use": "@vercel/python",
+      "config": {
+        "maxDuration": 60,
+        "excludeFiles": "{ui/**,db/**,ops/**,**/__pycache__/**,*.db,.env*}"
+      }
+    },
+    {
+      "src": "ui/package.json",
+      "use": "@vercel/static-build",
+      "config": { "distDir": "dist" }
+    }
+  ],
+  "build": {
+    "env": { "VITE_API_MESMA_ORIGEM": "1" }
+  },
+  "routes": [
+    {
+      "src": "/(.*)",
+      "headers": {
+        "X-Content-Type-Options": "nosniff",
+        "Referrer-Policy": "strict-origin-when-cross-origin",
+        "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
+        "Permissions-Policy": "camera=(), microphone=(), geolocation=()"
+      },
+      "continue": true
+    },
+    { "src": "/api/(.*)", "dest": "/api/index.py" },
+    {
+      "src": "/sw\\.js",
+      "headers": { "Cache-Control": "no-cache" },
+      "dest": "/ui/sw.js"
+    },
+    {
+      "src": "/assets/(.+)",
+      "headers": { "Cache-Control": "public, max-age=31536000, immutable" },
+      "dest": "/ui/assets/$1"
+    },
+    { "src": "/(icons/.+|manifest\\.webmanifest)", "dest": "/ui/$1" },
+    { "src": "/(.*)", "dest": "/ui/index.html" }
+  ]
+}

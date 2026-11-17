@@ -5,7 +5,11 @@
 
 // `?.` porque fora do Vite (os testes rodam os serviços direto no Node) o
 // import.meta.env não existe.
-const BASE = import.meta.env?.VITE_API_BASE || "http://127.0.0.1:8756";
+//
+// Na Vercel a API mora no mesmo endereço do app (/api/...), então o build
+// de lá liga VITE_API_MESMA_ORIGEM e as chamadas ficam relativas.
+const MESMA_ORIGEM = import.meta.env?.VITE_API_MESMA_ORIGEM === "1";
+const BASE = MESMA_ORIGEM ? "" : import.meta.env?.VITE_API_BASE || "http://127.0.0.1:8756";
 
 // O token fica em sessionStorage, não em localStorage: fechar a janela
 // derruba a sessão e o código do autenticador é pedido de novo. O
@@ -41,7 +45,12 @@ async function pedir(caminho, { metodo = "GET", corpo } = {}) {
     });
   } catch {
     // fetch só rejeita quando nem chegou a falar com o servidor.
-    throw new ApiError("Não consegui falar com o servidor local. Ele está rodando?", 0);
+    throw new ApiError(
+      MESMA_ORIGEM
+        ? "Não consegui falar com o servidor. Confira a internet."
+        : "Não consegui falar com o servidor local. Ele está rodando?",
+      0,
+    );
   }
 
   if (resp.status === 204) return null;
