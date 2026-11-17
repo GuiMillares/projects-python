@@ -3341,8 +3341,8 @@ textarea {
 @media (max-width: 899px) {
   .fin-topbar {
     background: var(--fin-vidro-barra);
-    -webkit-backdrop-filter: blur(28px) saturate(170%);
-    backdrop-filter: blur(28px) saturate(170%);
+    -webkit-backdrop-filter: blur(32px) saturate(180%);
+    backdrop-filter: blur(32px) saturate(180%);
     border-bottom-color: var(--fin-vidro-borda);
   }
 
@@ -3366,10 +3366,36 @@ textarea {
     transition: background var(--fin-transition), color var(--fin-transition);
   }
 
-  /* O item ativo vira uma gota de vidro dentro da cápsula. */
-  .fin-bottomnav__item.active {
+  /* A aba ativa é marcada por uma gota de vidro que DESLIZA de uma aba
+     para a outra. --n (abas) e --i (a ativa) vêm do AppLayout; a gota
+     tem a largura de uma aba e anda --i larguras. A curva passa um pouco
+     do ponto e volta, como líquido. Fora das abas (Contas, Configurações)
+     ela some no lugar. */
+  .fin-bottomnav__gota {
+    position: absolute;
+    top: 4px;
+    left: 4px;
+    width: calc((100% - 8px) / var(--n));
+    height: calc(var(--fin-bottomnav-h) - 8px);
+    border-radius: 999px;
     background: var(--fin-vidro-ativo);
-    box-shadow: inset 0 1px 0 var(--fin-vidro-brilho);
+    box-shadow: inset 0 1px 0 var(--fin-vidro-brilho), 0 2px 8px var(--fin-vidro-sombra);
+    transform: translateX(calc(var(--i) * 100%));
+    transition: transform 0.45s cubic-bezier(0.34, 1.45, 0.64, 1), opacity 0.2s ease;
+    pointer-events: none;
+  }
+
+  .fin-bottomnav[data-ativa="nao"] .fin-bottomnav__gota {
+    opacity: 0;
+  }
+
+  .fin-bottomnav__item {
+    z-index: 1;
+  }
+
+  /* O ícone da aba que acabou de ficar ativa dá um pulinho. */
+  .fin-bottomnav__item.active svg {
+    animation: fin-gota-pulo 0.45s cubic-bezier(0.34, 1.45, 0.64, 1);
   }
 
   .fin-bottomnav__item.active::before {
@@ -3420,6 +3446,37 @@ textarea {
     -webkit-backdrop-filter: blur(14px) saturate(160%);
     backdrop-filter: blur(14px) saturate(160%);
     box-shadow: inset 0 1px 0 var(--fin-vidro-brilho);
+  }
+}
+
+@keyframes fin-gota-pulo {
+  0% {
+    transform: scale(0.82) translateY(2px);
+  }
+  60% {
+    transform: scale(1.12) translateY(-2px);
+  }
+  100% {
+    transform: none;
+  }
+}
+
+/* Gota não desktop: a barra de baixo nem existe lá. */
+@media (min-width: 900px) {
+  .fin-bottomnav__gota {
+    display: none;
+  }
+}
+
+/* Quem desliga animações no sistema vê a gota trocar de lugar sem
+   deslizar, e o ícone parado. */
+@media (prefers-reduced-motion: reduce) {
+  .fin-bottomnav__gota {
+    transition: none;
+  }
+
+  .fin-bottomnav__item.active svg {
+    animation: none;
   }
 }
 

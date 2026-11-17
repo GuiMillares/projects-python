@@ -39,6 +39,13 @@ const NAV = [
   { to: "/app/metas", icon: Target, label: "Metas", curto: "Metas" },
 ];
 
+// Abas da barra de baixo, na ordem em que aparecem.
+const BARRA = NAV.filter((n) => !n.foraDaBarra);
+
+// Índice da aba ativa (-1 em Contas e Configurações, que não estão na barra).
+const abaAtiva = (pathname) =>
+  BARRA.findIndex(({ to, fim }) => (fim ? pathname === to : pathname === to || pathname.startsWith(`${to}/`)));
+
 const TITULOS = {
   "/app": "Visão geral",
   "/app/contas": "Contas",
@@ -53,6 +60,7 @@ const TITULOS = {
 export default function AppLayout({ children }) {
   const navigate = useNavigate();
   const { pathname } = useLocation();
+  const ativa = abaAtiva(pathname);
   const { theme, toggleTheme } = useTheme();
   const escuro = theme === "dark";
 
@@ -224,8 +232,16 @@ export default function AppLayout({ children }) {
         </main>
       </div>
 
-      <nav className="fin-bottomnav" aria-label="Navegação principal">
-        {NAV.filter((n) => !n.foraDaBarra).map(({ to, fim, icon: Icone, curto }) => (
+      {/* A gota de vidro desliza até a aba ativa: posição por variável CSS,
+          a animação é toda do CSS (ver "VIDRO" no app.css). */}
+      <nav
+        className="fin-bottomnav"
+        aria-label="Navegação principal"
+        style={{ "--n": BARRA.length, "--i": Math.max(ativa, 0) }}
+        data-ativa={ativa >= 0 ? "sim" : "nao"}
+      >
+        <span className="fin-bottomnav__gota" aria-hidden="true" />
+        {BARRA.map(({ to, fim, icon: Icone, curto }) => (
           <NavLink
             key={to}
             to={to}

@@ -100,8 +100,8 @@
   /* ── Vidro (só no celular: barras e botões, ver app.css "Vidro") ──
      Fundo translúcido + desfoque do que passa por trás. O brilho é uma
      linha de luz na borda de cima, não um gradiente. */
-  --fin-vidro-barra: rgba(16, 15, 10, 0.74);
-  --fin-vidro-botao: rgba(235, 226, 208, 0.06);
+  --fin-vidro-barra: rgba(16, 15, 10, 0.48);
+  --fin-vidro-botao: rgba(235, 226, 208, 0.04);
   --fin-vidro-ativo: rgba(168, 189, 82, 0.16);
   --fin-vidro-borda: rgba(235, 226, 208, 0.14);
   --fin-vidro-brilho: rgba(255, 250, 235, 0.10);
@@ -176,8 +176,8 @@
 
   --fin-statusbar: #231F18;
 
-  --fin-vidro-barra: rgba(251, 248, 241, 0.78);
-  --fin-vidro-botao: rgba(255, 255, 255, 0.45);
+  --fin-vidro-barra: rgba(251, 248, 241, 0.52);
+  --fin-vidro-botao: rgba(255, 255, 255, 0.30);
   --fin-vidro-ativo: rgba(85, 107, 24, 0.12);
   --fin-vidro-borda: rgba(35, 31, 24, 0.10);
   --fin-vidro-brilho: rgba(255, 255, 255, 0.75);
