@@ -8,6 +8,9 @@ import { api } from "./api";
  */
 export const lerOpenFinance = () => api.get("/api/openfinance");
 
+// Rápida (banco local): quantas conexões a pessoa tem. Ver Dashboard.
+export const situacaoOpenFinance = () => api.get("/api/openfinance/situacao");
+
 /** Token do widget Pluggy Connect. Com `conexaoId`, abre para reconectar. */
 export const tokenDoWidget = (conexaoId) =>
   api.post("/api/openfinance/connect-token", conexaoId ? { conexaoId } : {});

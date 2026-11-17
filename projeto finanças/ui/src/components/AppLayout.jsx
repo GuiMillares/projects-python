@@ -27,6 +27,7 @@ import { sair as encerrarSessao } from "../services/authService";
 import { iniciais } from "../services/perfilService";
 import InstalarApp from "./InstalarApp";
 import OfertaPasskey from "./OfertaPasskey";
+import PerguntaVinculo from "./PerguntaVinculo";
 
 const NAV = [
   { to: "/app", fim: true, icon: LayoutGrid, label: "Visão geral", curto: "Geral" },
@@ -202,6 +203,7 @@ export default function AppLayout({ children }) {
         </header>
 
         <main className="fin-content">
+          <PerguntaVinculo />
           <OfertaPasskey />
           <InstalarApp />
           {children}

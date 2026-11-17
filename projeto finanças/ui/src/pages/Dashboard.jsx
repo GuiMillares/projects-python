@@ -39,6 +39,7 @@ import {
   faturasAVencer,
   importarSeFaltar,
   lerOpenFinance,
+  situacaoOpenFinance,
   resumoOpenFinance,
 } from "../services/openfinanceService";
 import {
@@ -87,12 +88,24 @@ export default function Dashboard() {
   const [sync, setSync] = useState("");
   const [carteira, setCarteira] = useState([]);
 
+  // Quem tem banco conectado vê o saldo DOS BANCOS, nunca o calculado pelos
+  // lançamentos: essa conta soma o histórico importado sem o saldo que já
+  // existia antes dele e pode dar qualquer número (já mostrou -22 mil por 15
+  // segundos até a Pluggy responder). A situação vem do banco local, na
+  // hora, junto com os lançamentos.
+  const [temBancos, setTemBancos] = useState(false);
+
   useEffect(() => {
     (async () => {
       try {
-        const [ts, orc] = await Promise.all([listarTransacoes(), carregarOrcamentos()]);
+        const [ts, orc, sit] = await Promise.all([
+          listarTransacoes(),
+          carregarOrcamentos(),
+          situacaoOpenFinance().catch(() => ({ conexoes: 0 })),
+        ]);
         setTransacoes(contaveis(ts));
         setOrcamentos(orc || {});
+        setTemBancos(sit.conexoes > 0);
       } catch (e) {
         // Sessão que expirou no meio do uso volta para o login em vez de
         // mostrar um erro que o usuário não tem como resolver na tela.
@@ -147,7 +160,7 @@ export default function Dashboard() {
   const mesAtual = chaveMes(hoje);
 
   const bancos = useMemo(() => {
-    const r = openFinance ? resumoOpenFinance(openFinance.conexoes) : null;
+    const r = openFinance ? resumoOpenFinance(openFinance.conexoes || []) : null;
     // Conexão cadastrada que não respondeu não conta: sem nenhum saldo
     // lido, a tela volta para o saldo calculado pelos lançamentos.
     return r && r.contas > 0 ? r : null;
@@ -167,22 +180,28 @@ export default function Dashboard() {
     // saldo das contas menos o que já está gasto nas faturas abertas. As
     // compras do cartão já são saídas nos lançamentos, então é essa a
     // conta que bate com eles.
+    // Banco conectado e ainda sem resposta: saldo, previsão e curva esperam
+    // (null), em vez de cair no cálculo pelos lançamentos.
+    const esperar = temBancos && !bancos;
     const ancora = bancos ? bancos.saldo - bancos.emAberto : null;
-    const saldo = bancos ? bancos.saldo : saldoAtual(transacoes);
+    const saldo = bancos ? bancos.saldo : esperar ? null : saldoAtual(transacoes);
     const recorrentes = detectarRecorrentes(transacoes, hoje);
 
     return {
       saldo,
       recorrentes,
-      previsao: previsaoDoMes({
-        saldoHoje: saldo,
-        recorrentes,
-        cartoes: (openFinance?.conexoes || []).flatMap((c) => c.dados?.cartoes || []),
-        hoje,
-      }),
+      previsao:
+        saldo == null
+          ? null
+          : previsaoDoMes({
+              saldoHoje: saldo,
+              recorrentes,
+              cartoes: (openFinance?.conexoes || []).flatMap((c) => c.dados?.cartoes || []),
+              hoje,
+            }),
       mes: resumoDoMes(transacoes, mesAtual),
       anterior: resumoDoMes(transacoes, mesPassado),
-      serieSaldo: serieSaldoAcumulado(transacoes, meses, ancora),
+      serieSaldo: esperar ? null : serieSaldoAcumulado(transacoes, meses, ancora),
       serieFluxo: serieEntradasSaidas(transacoes, meses),
       categorias: gastosPorCategoria(transacoes, mesAtual).map((c) => ({
         ...c,
@@ -194,11 +213,18 @@ export default function Dashboard() {
         ...alertasDeRecorrentes(recorrentes),
       ].sort((a, b) => a.ordem - b.ordem || b.valor - a.valor),
     };
-  }, [transacoes, orcamentos, janela, hoje, mesAtual, bancos, openFinance]);
+  }, [transacoes, orcamentos, janela, hoje, mesAtual, bancos, openFinance, temBancos]);
+
+  // Lendo: a Pluggy ainda não respondeu. Indisponível: respondeu sem
+  // nenhum saldo (conexão caída, credencial removida).
+  const lendoBancos = temBancos && !bancos && !openFinance && sync !== "falhou";
+  const bancosFora = temBancos && !bancos && !lendoBancos;
 
   const patrimonio = useMemo(() => {
     const valorCarteira = carteira.reduce((s, p) => s + (p.atual ?? p.investido), 0);
     if (!bancos && !carteira.length) return null;
+    // Sem os bancos, o total sairia só com a carteira: melhor não mostrar.
+    if (temBancos && !bancos) return null;
     return {
       bancos,
       carteira: carteira.length ? valorCarteira : null,
@@ -207,7 +233,7 @@ export default function Dashboard() {
       total:
         (bancos ? bancos.saldo + bancos.investido - bancos.emAberto : 0) + valorCarteira,
     };
-  }, [bancos, carteira]);
+  }, [bancos, carteira, temBancos]);
 
   if (carregando) {
     return (
@@ -265,7 +291,7 @@ export default function Dashboard() {
     dados;
   const estouros = atencao.filter((a) => a.tipo === "estouro");
   const criticos = atencao.filter((a) => a.tipo === "estouro" || a.tipo === "atrasada").length;
-  const saldoFinalSerie = serieSaldo.length ? serieSaldo[serieSaldo.length - 1].valor : saldo;
+  const saldoFinalSerie = serieSaldo?.length ? serieSaldo[serieSaldo.length - 1].valor : saldo;
 
   // Variação das saídas contra o mês anterior, contexto para o KPI.
   const varSaidas =
@@ -275,7 +301,7 @@ export default function Dashboard() {
     <>
       <CabecalhoPagina hoje={hoje} sync={sync} />
 
-      {saldo < 0 && (
+      {saldo != null && saldo < 0 && (
         <div className="fin-banner" style={{ "--bc": "var(--fin-danger)" }}>
           <ShieldAlert size={16} />
           <span>
@@ -285,7 +311,7 @@ export default function Dashboard() {
         </div>
       )}
 
-      {saldo >= 0 && estouros.length > 0 && (
+      {!(saldo < 0) && estouros.length > 0 && (
         <div className="fin-banner" style={{ "--bc": "var(--fin-warn)" }}>
           <AlertTriangle size={16} />
           <span>
@@ -299,18 +325,36 @@ export default function Dashboard() {
 
       {/* ── KPIs ── */}
       <div className="fin-kpis">
-        <Kpi
-          cor={saldo < 0 ? "var(--fin-danger)" : "var(--fin-accent)"}
-          icone={bancos ? Landmark : Wallet}
-          label={bancos ? "Saldo em contas" : "Saldo atual"}
-          valor={brl(saldo)}
-          sub={
-            bancos
-              ? `${bancos.contas} ${bancos.contas === 1 ? "conta conectada" : "contas conectadas"}`
-              : `${transacoes.length} lançamentos no histórico`
-          }
-          tingido={saldo < 0}
-        />
+        {saldo == null ? (
+          <Kpi
+            cor="var(--fin-muted)"
+            icone={Landmark}
+            label="Saldo em contas"
+            valor={
+              lendoBancos ? (
+                <span className="fin-kpi__espera">
+                  <Loader2 size={16} className="fin-spin" /> lendo
+                </span>
+              ) : (
+                <span className="fin-kpi__espera">indisponível</span>
+              )
+            }
+            sub={lendoBancos ? "buscando nos seus bancos" : "não consegui ler os bancos agora"}
+          />
+        ) : (
+          <Kpi
+            cor={saldo < 0 ? "var(--fin-danger)" : "var(--fin-accent)"}
+            icone={bancos ? Landmark : Wallet}
+            label={bancos ? "Saldo em contas" : "Saldo atual"}
+            valor={brl(saldo)}
+            sub={
+              bancos
+                ? `${bancos.contas} ${bancos.contas === 1 ? "conta conectada" : "contas conectadas"}`
+                : `${transacoes.length} lançamentos no histórico`
+            }
+            tingido={saldo < 0}
+          />
+        )}
         <Kpi
           cor="var(--fin-in)"
           icone={ArrowUpRight}
@@ -349,7 +393,11 @@ export default function Dashboard() {
 
       {/* ── Previsão + recorrentes ── */}
       <div className="fin-grid-2 fin-grid-2--even">
-        <Previsao p={previsao} comBanco={Boolean(bancos)} />
+        {previsao ? (
+          <Previsao p={previsao} comBanco={Boolean(bancos)} />
+        ) : (
+          <EsperaBancos titulo="Previsão do mês" lendo={lendoBancos} />
+        )}
         <Recorrentes lista={recorrentes} />
       </div>
 
@@ -376,11 +424,18 @@ export default function Dashboard() {
             </div>
           </div>
 
-          <LineChart
-            data={serieSaldo}
-            color={saldoFinalSerie < 0 ? "var(--fin-out)" : "var(--fin-accent)"}
-            format={brl}
-          />
+          {serieSaldo ? (
+            <LineChart
+              data={serieSaldo}
+              color={saldoFinalSerie < 0 ? "var(--fin-out)" : "var(--fin-accent)"}
+              format={brl}
+            />
+          ) : (
+            <div className="fin-loading" style={{ minHeight: 180 }}>
+              {lendoBancos ? <Loader2 size={17} className="fin-spin" /> : null}
+              <span>{lendoBancos ? "Lendo seus bancos..." : "Sem os saldos dos bancos agora."}</span>
+            </div>
+          )}
         </div>
 
         <div className="fin-card fin-card--flush">
@@ -701,6 +756,25 @@ function ItemPatrimonio({ label, valor, sub, cor = "var(--fin-text)", total = fa
         {brl(valor)}
       </div>
       <div className="fin-patri__sub">{sub}</div>
+    </div>
+  );
+}
+
+// Card no lugar de algo que depende do saldo dos bancos, enquanto ele não
+// chega (ou quando não chegou).
+function EsperaBancos({ titulo, lendo }) {
+  return (
+    <div className="fin-card">
+      <div className="fin-card__head">
+        <div>
+          <div className="fin-card__title">{titulo}</div>
+          <div className="fin-card__sub">parte do saldo das suas contas</div>
+        </div>
+      </div>
+      <div className="fin-loading" style={{ minHeight: 120 }}>
+        {lendo ? <Loader2 size={17} className="fin-spin" /> : null}
+        <span>{lendo ? "Lendo seus bancos..." : "Sem os saldos dos bancos agora. Tente sincronizar em Contas."}</span>
+      </div>
     </div>
   );
 }

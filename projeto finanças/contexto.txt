@@ -636,8 +636,45 @@ No modo aparelho segue prefers-color-scheme ao vivo. Script no <head> do
 index.html aplica antes da primeira pintura. Escolha em Configurações >
 Aparência; o botão da topbar fixa o oposto do que está na tela.
 
+TIDB (17/11/2026): o TiDB NÃO aceita o alias de linha do MySQL 8 em
+"INSERT ... VALUES (...) AS novo ON DUPLICATE KEY UPDATE x = novo.x".
+Use VALUES(x). E não conte com a ordem das atribuições num UPDATE/ON
+DUPLICATE (o MySQL aplica da esquerda para a direita; o TiDB não garante):
+cada expressão deve ler só valores antigos e os novos.
+/api/saude lista as tabelas do schema que faltam no banco. A cada tabela
+nova, rode o db/schema.sql no TiDB (é idempotente) ANTES de usar a tela.
+
+TELA INICIAL (17/11/2026): quem tem banco conectado NUNCA vê o saldo
+calculado pelos lançamentos (soma do histórico importado sem o saldo
+anterior: já mostrou -22 mil por 15 s). /api/openfinance/situacao (banco
+local, instantânea) diz se há conexão; até a Pluggy responder, saldo,
+previsão e curva mostram "lendo"; se ela não responder, "indisponível".
+A leitura da Pluggy é paralela: conexões entre si e, dentro de cada uma,
+item, contas, investimentos e cartões (faturas + compras juntas).
+
+ESPAÇO COMPARTILHADO, ENTREGA 1 DE 3 (17/11/2026). Decisões do dono:
+convite por link, cada um edita só o seu (metas do espaço: todos), até 6
+pessoas, privado por conta bancária E por lançamento, tudo compartilhado
+por padrão. Fluxo pedido por ele: quem tem conta convida o par; o par
+cria a conta pelo link e, ao entrar, responde "Vincular com Fulano?".
+* api/espacos.py; tabelas espacos, espaco_membros (PK usuario_id: uma
+  pessoa, um espaço), convites (só hash do código, 7 dias, uso único).
+* O espaço só nasce no SIM. Dono convida e remove; se sair, o membro mais
+  antigo herda; sobrando uma pessoa, o espaço acaba. Apagar a conta
+  chama espacos.sair antes.
+* Cadastro SÓ por convite (/api/convites/<t>/cadastro): conta e captura
+  do convite na mesma transação; sessão nasce parcial (vai para o 2FA).
+* Front: /convite/<t> (Convite.jsx), PerguntaVinculo no AppLayout,
+  EspacoCard em Configurações. Documentos na VERSAO 2026-11-17.3 (seção
+  4b dos termos; política cita o que os membros veem).
+* 30 verificações com usuários descartáveis (scratchpad, não versionado).
+
 Próximos passos, nesta ordem:
-1. Espaço do casal: visão Eu / Ela / Juntos, tudo compartilhado por
-   padrão com opção de privado, Pix entre os dois fora da soma, metas
-   individuais e do casal. Cada pessoa com a PRÓPRIA credencial Pluggy.
-2. Backup do TiDB (ops/backup.py foi escrito para o MySQL local).
+1. Espaço, entrega 2: visões Eu / cada pessoa / Juntos em Visão geral,
+   Entradas e Saídas; cadeado por lançamento e por conta bancária
+   (privado não aparece nem soma); Pix entre membros fora da soma do
+   Juntos; quem lançou é o único que edita.
+2. Espaço, entrega 3: metas do espaço (todos mexem), investimentos,
+   saldos das contas de todos (cada um lido com a PRÓPRIA credencial
+   Pluggy, no servidor) e orçamentos no Juntos.
+3. Backup do TiDB (ops/backup.py foi escrito para o MySQL local).

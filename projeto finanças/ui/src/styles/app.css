@@ -1114,6 +1114,19 @@ textarea {
 /* Valor monetário NUNCA quebra no meio: "R$ 51.400,0 / 5" em duas linhas
    é ilegível e ainda parece outro número. Se faltar espaço, o texto é
    cortado com reticências, e o valor cheio continua no tooltip/lista. */
+/* Saldo esperando os bancos: texto apagado no lugar do número, para não
+   parecer um valor de verdade. */
+.fin-kpi__espera {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-family: var(--fin-font);
+  font-size: 0.95rem;
+  font-weight: 500;
+  letter-spacing: 0;
+  color: var(--fin-muted);
+}
+
 .fin-kpi__val {
   font-family: var(--fin-font-num);
   font-variant-numeric: tabular-nums;
@@ -1345,6 +1358,12 @@ textarea {
   color: var(--bc, var(--fin-warn));
   font-size: 12.5px;
   margin-bottom: 12px;
+}
+
+/* Link dentro de texto de ajuda (ex.: termos na página do convite): na cor
+   do acento, nunca o azul padrão do navegador. */
+.fin-field__hint a {
+  color: var(--fin-accent);
 }
 
 /* Convite de instalação: coisa de celular, some no desktop. */
@@ -2629,6 +2648,33 @@ textarea {
   justify-content: center;
   color: var(--fin-danger);
   background: var(--fin-danger-soft);
+}
+
+/* Fechar no canto, para "responder depois" sem escolher. */
+.fin-modal {
+  position: relative;
+}
+
+.fin-modal__fechar {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+}
+
+/* Modal que pergunta, e não que alerta (ex.: vincular ao espaço). */
+.fin-modal__icone--acento {
+  color: var(--fin-accent);
+  background: var(--fin-accent-dim);
+}
+
+.fin-modal__lista {
+  margin: 0 0 16px;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 12.5px;
+  color: var(--fin-muted);
 }
 
 .fin-modal__titulo {

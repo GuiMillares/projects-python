@@ -31,6 +31,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import ApagarConta from "../components/ApagarConta";
 import CadastroNoCelular from "../components/CadastroNoCelular";
+import EspacoCard from "../components/EspacoCard";
 import PasskeysCard from "../components/PasskeysCard";
 import { useTheme } from "../context/ThemeProvider";
 import { usePerfil } from "../context/PerfilProvider";
@@ -692,6 +693,9 @@ export default function Configuracoes() {
 
           <PasskeysCard avisar={avisar} />
         </div>
+
+        {/* ── Espaço compartilhado: linha inteira ── */}
+        <EspacoCard avisar={avisar} />
 
         {/* ── Orçamentos: linha inteira, é uma tabela ── */}
         <section className="fin-card fin-cfg-largo">

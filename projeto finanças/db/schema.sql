@@ -325,3 +325,53 @@ CREATE TABLE IF NOT EXISTS desafios_webauthn (
   PRIMARY KEY (id),
   KEY ix_desafios_expira (expira_em)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ── Espaço compartilhado (casal, família) ───────────────────
+-- Um espaço junta até 6 pessoas que veem as finanças umas das outras
+-- (menos o que cada uma marcar como privado). Nasce quando alguém aceita
+-- um convite: o espaço nunca existe vazio. Cada pessoa está em no máximo
+-- um espaço (PRIMARY KEY em usuario_id). Ver api/espacos.py.
+CREATE TABLE IF NOT EXISTS espacos (
+  id          INT UNSIGNED  NOT NULL AUTO_INCREMENT,
+  nome        VARCHAR(80)   NOT NULL DEFAULT '',
+  criado_em   DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS espaco_membros (
+  usuario_id  INT UNSIGNED  NOT NULL,
+  espaco_id   INT UNSIGNED  NOT NULL,
+  -- 'dono' convida e remove; 'membro' só sai. O primeiro dono é quem
+  -- convidou; se ele sair, o membro mais antigo herda.
+  papel       VARCHAR(10)   NOT NULL DEFAULT 'membro',
+  entrou_em   DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (usuario_id),
+  KEY ix_membros_espaco (espaco_id),
+  CONSTRAINT fk_membros_usuario FOREIGN KEY (usuario_id)
+    REFERENCES usuarios (id) ON DELETE CASCADE,
+  CONSTRAINT fk_membros_espaco FOREIGN KEY (espaco_id)
+    REFERENCES espacos (id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Convite por link, de uso único, válido por 7 dias. No banco fica só o
+-- hash do código, como nas sessões. `usado_por` é quem pegou o convite
+-- (ao criar a conta por ele, ou ao abrir com conta já existente);
+-- `aceito_em` é quando essa pessoa disse sim ao vínculo.
+CREATE TABLE IF NOT EXISTS convites (
+  id          INT UNSIGNED  NOT NULL AUTO_INCREMENT,
+  token_hash  CHAR(64)      NOT NULL,
+  criado_por  INT UNSIGNED  NOT NULL,
+  expira_em   DATETIME      NOT NULL,
+  usado_por   INT UNSIGNED  NULL,
+  usado_em    DATETIME      NULL,
+  aceito_em   DATETIME      NULL,
+  criado_em   DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_convites_token (token_hash),
+  KEY ix_convites_criador (criado_por),
+  KEY ix_convites_usado_por (usado_por),
+  CONSTRAINT fk_convites_criador FOREIGN KEY (criado_por)
+    REFERENCES usuarios (id) ON DELETE CASCADE,
+  CONSTRAINT fk_convites_usado_por FOREIGN KEY (usado_por)
+    REFERENCES usuarios (id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

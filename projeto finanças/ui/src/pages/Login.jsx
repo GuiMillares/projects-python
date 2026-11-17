@@ -18,7 +18,7 @@ import {
 } from "lucide-react";
 import QRCode from "qrcode";
 import { useEffect, useRef, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import CadastroNoCelular from "../components/CadastroNoCelular";
 import { ApiError, limparToken } from "../services/api";
 import {
@@ -44,9 +44,13 @@ const LEDGER = [
 
 export default function Login() {
   const navigate = useNavigate();
+  // Conta recém-criada por convite chega aqui com a sessão parcial já
+  // guardada: o próximo passo é o cadastro do 2FA, sem pedir a senha de novo.
+  const local = useLocation();
+  const continuar = local.state?.continuar;
 
   const [step, setStep] = useState("login");
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(local.state?.email || "");
   const [senha, setSenha] = useState("");
   const [mostrarSenha, setMostrarSenha] = useState(false);
   const [codigo, setCodigo] = useState("");
@@ -89,6 +93,15 @@ export default function Login() {
 
   useEffect(() => {
     (async () => {
+      if (continuar === "setup2fa") {
+        try {
+          await abrirSetup2FA();
+        } catch (e) {
+          limparToken();
+          setErro(e.message);
+        }
+        return;
+      }
       if (await sessaoValida()) {
         navigate("/app", { replace: true });
         return;

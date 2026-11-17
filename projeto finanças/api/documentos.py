@@ -12,8 +12,8 @@ recebendo dado, cobrança, backup com outro prazo), o texto muda junto.
 
 import config
 
-VERSAO = "2026-11-17.2"
-VERSAO_POR_EXTENSO = "17 de novembro de 2026 (entrada por passkey)"
+VERSAO = "2026-11-17.3"
+VERSAO_POR_EXTENSO = "17 de novembro de 2026 (espaço compartilhado)"
 
 
 def _secao(titulo, *paragrafos, itens=None):
@@ -49,6 +49,17 @@ TERMOS = {
             "O plano gratuito da Pluggy é pessoal e intransferível. Por isso cada pessoa usa a "
             "própria conta no Meu Pluggy e a própria aplicação na Pluggy, e cadastra no app as "
             "credenciais dessa aplicação. O app usa a sua credencial só para ler os seus dados.",
+        ),
+        _secao(
+            "4b. Espaço compartilhado",
+            "Você pode convidar seu par ou sua família (até 6 pessoas) para um espaço "
+            "compartilhado, por um link de uso único que vale 7 dias. Quem recebe decide se "
+            "vincula. Dentro do espaço, cada pessoa vê o que as outras compartilham, mas só "
+            "quem lançou edita ou apaga; as metas do espaço são a exceção, e todos mexem nelas.",
+            "Tudo é compartilhado por padrão. Uma conta bancária ou um lançamento marcado como "
+            "privado não aparece para os outros nem entra na soma do Juntos. Qualquer pessoa "
+            "pode sair do espaço quando quiser, e o acesso dos outros aos dados dela acaba na "
+            "hora. Quem administra o espaço pode remover alguém.",
         ),
         _secao(
             "5. Os números e as sugestões",
@@ -121,6 +132,9 @@ def _privacidade():
                     "Registros de segurança: as sessões abertas (só o resumo do código de "
                     "acesso), as tentativas de login erradas e a versão destes documentos "
                     "que você aceitou, com data e hora.",
+                    "Espaço compartilhado: de qual espaço você faz parte, seu papel nele, "
+                    "quando entrou e os convites que você gerou ou recebeu (do convite, só um "
+                    "resumo do código, nunca o código em si).",
                     "Passkeys, se você cadastrar a entrada com Face ID ou digital: o nome do "
                     "aparelho, a chave pública que ele gerou e as datas de cadastro e de uso. "
                     "Sua biometria nunca chega ao app: ela fica no aparelho, que só confirma "
@@ -143,6 +157,10 @@ def _privacidade():
             _secao(
                 "5. Com quem os dados são compartilhados",
                 itens=[
+                    "Pessoas do seu espaço compartilhado, se você vincular: veem seus "
+                    "lançamentos, contas, saldos, faturas, investimentos e metas, e o seu "
+                    "nome e e-mail. Não veem o que você marcar como privado. Ao sair do "
+                    "espaço, deixam de ver na hora.",
                     "Pluggy: lê os dados das suas contas e cartões no Open Finance, pela sua "
                     "própria aplicação e com o consentimento que você dá no banco, e segue as "
                     "regras do Banco Central.",

@@ -5,6 +5,7 @@ import { PerfilProvider } from "./context/PerfilProvider";
 import Aceite from "./pages/Aceite";
 import Configuracoes from "./pages/Configuracoes";
 import Conferir from "./pages/Conferir";
+import Convite from "./pages/Convite";
 import Contas from "./pages/Contas";
 import Dashboard from "./pages/Dashboard";
 import Documento from "./pages/Documento";
@@ -41,6 +42,7 @@ export default function App() {
     <Routes>
       <Route path="/login" element={<Login />} />
       <Route path="/aceite" element={<Aceite />} />
+      <Route path="/convite/:token" element={<Convite />} />
       <Route path="/termos" element={<Documento tipo="termos" />} />
       <Route path="/privacidade" element={<Documento tipo="privacidade" />} />
 

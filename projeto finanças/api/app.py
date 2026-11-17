@@ -11,6 +11,7 @@ Rodar:
 """
 
 import re
+from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 from functools import wraps
@@ -24,6 +25,7 @@ import cotacoes
 import documentos
 import gamificacao
 import ia
+import espacos
 import openfinance
 import passkeys
 import seguranca
@@ -189,6 +191,135 @@ def verificar_2fa():
     seguranca.limpar_falhas(sessao["usuario_id"])
     seguranca.promover_sessao(sessao["id"])
     return jsonify({"ok": True})
+
+
+# ── Espaço compartilhado e convites (api/espacos.py) ─────────
+_EMAIL = re.compile(r"^[^@\s]{1,64}@[^@\s]{1,120}\.[^@\s]{2,}$")
+
+
+def _erro_espaco(e):
+    return erro(str(e), e.status)
+
+
+@app.get("/api/convites/<token>")
+def convite_ver(token):
+    """Público: a página do convite mostra quem convidou. Com sessão, a
+    própria pessoa que já pegou o convite também consegue ver."""
+    sessao = seguranca.ler_sessao(_token_do_header())
+    uid = sessao["usuario_id"] if sessao and sessao["dois_fatores_ok"] else None
+    try:
+        return jsonify(espacos.ver_convite(token, uid))
+    except espacos.EspacoErro as e:
+        return _erro_espaco(e)
+
+
+@app.post("/api/convites/<token>/cadastro")
+def convite_cadastro(token):
+    """Cria a conta por um convite. Não existe cadastro aberto: sem link
+    válido, não há conta nova. A conta e a captura do convite acontecem na
+    mesma transação. A sessão nasce parcial, como num login com senha: o
+    próximo passo é cadastrar o 2FA."""
+    d = request.get_json(silent=True) or {}
+    email = str(d.get("email") or "").strip().lower()
+    nome = str(d.get("nome") or "").strip()[:120]
+    senha = str(d.get("senha") or "")
+    if len(email) > 190 or not _EMAIL.match(email):
+        return erro("Confira o e-mail.")
+    if not 8 <= len(senha) <= 200:
+        return erro("A senha precisa ter pelo menos 8 caracteres.")
+
+    try:
+        with cursor(commit=True) as cur:
+            cur.execute("SELECT id FROM usuarios WHERE email = %s", (email,))
+            if cur.fetchone():
+                return erro(
+                    "Já existe uma conta com esse e-mail. Entre com ela e abra o link de novo.", 409
+                )
+            cur.execute(
+                "INSERT INTO usuarios (email, senha_hash, nome) VALUES (%s, %s, %s)",
+                (email, seguranca.hash_senha(senha), nome),
+            )
+            uid = cur.lastrowid
+            espacos.pegar_convite(cur, token, uid)
+    except espacos.EspacoErro as e:
+        return _erro_espaco(e)
+
+    token_sessao = seguranca.criar_sessao(uid, dois_fatores_ok=False)
+    return jsonify({"token": token_sessao, "etapa": "setup2fa"}), 201
+
+
+@app.post("/api/convites/<token>/pegar")
+@exige_sessao()
+def convite_pegar(token):
+    """Quem já tem conta abre o link: o convite fica preso a ela e a
+    pergunta "vincular?" aparece."""
+    try:
+        with cursor(commit=True) as cur:
+            espacos.pegar_convite(cur, token, g.sessao["usuario_id"])
+    except espacos.EspacoErro as e:
+        return _erro_espaco(e)
+    return jsonify(espacos.convite_pendente(g.sessao["usuario_id"]))
+
+
+@app.get("/api/espaco")
+@exige_sessao()
+def espaco_ler():
+    return jsonify(espacos.resumo(g.sessao["usuario_id"]))
+
+
+@app.post("/api/espaco/convite")
+@exige_sessao()
+def espaco_convidar():
+    try:
+        return jsonify(espacos.criar_convite(g.sessao["usuario_id"])), 201
+    except espacos.EspacoErro as e:
+        return _erro_espaco(e)
+
+
+@app.delete("/api/espaco/convite")
+@exige_sessao()
+def espaco_cancelar_convite():
+    espacos.cancelar_convite(g.sessao["usuario_id"])
+    return jsonify({"ok": True})
+
+
+@app.post("/api/espaco/aceitar")
+@exige_sessao()
+def espaco_aceitar():
+    convite_id = (request.get_json(silent=True) or {}).get("conviteId")
+    if not isinstance(convite_id, int):
+        return erro("Convite inválido.")
+    try:
+        espacos.aceitar(g.sessao["usuario_id"], convite_id)
+    except espacos.EspacoErro as e:
+        return _erro_espaco(e)
+    return jsonify(espacos.resumo(g.sessao["usuario_id"]))
+
+
+@app.post("/api/espaco/recusar")
+@exige_sessao()
+def espaco_recusar():
+    convite_id = (request.get_json(silent=True) or {}).get("conviteId")
+    if isinstance(convite_id, int):
+        espacos.recusar(g.sessao["usuario_id"], convite_id)
+    return jsonify({"ok": True})
+
+
+@app.post("/api/espaco/sair")
+@exige_sessao()
+def espaco_sair():
+    espacos.sair(g.sessao["usuario_id"])
+    return jsonify(espacos.resumo(g.sessao["usuario_id"]))
+
+
+@app.delete("/api/espaco/membros/<int:membro_id>")
+@exige_sessao()
+def espaco_remover(membro_id):
+    try:
+        espacos.remover_membro(g.sessao["usuario_id"], membro_id)
+    except espacos.EspacoErro as e:
+        return _erro_espaco(e)
+    return jsonify(espacos.resumo(g.sessao["usuario_id"]))
 
 
 # ── Passkeys (Face ID / digital) ─────────────────────────────
@@ -452,6 +583,12 @@ def exportar_conta():
     # Passkeys: só apelido e datas. A chave pública não serve para nada fora
     # daqui, e o id da credencial é detalhe técnico.
     dados["passkeys"] = passkeys.listar(uid)
+    # Do espaço, só o que é desta pessoa: o papel e quando entrou. Nome e
+    # e-mail dos outros membros são dados deles, não vão no arquivo dela.
+    meu = buscar_um(
+        "SELECT papel, entrou_em FROM espaco_membros WHERE usuario_id = %s", (uid,)
+    )
+    dados["espaco"] = _exportavel(meu) if meu else None
     return jsonify(dados)
 
 
@@ -480,6 +617,10 @@ def apagar_conta():
         return erro("Código incorreto ou expirado.", 401)
 
     cred, _ = _credencial(uid)
+    # Sai do espaço antes: se era quem administrava, outro membro herda; se
+    # sobrar uma pessoa só, o espaço acaba. A cascata sozinha deixaria um
+    # espaço sem dono.
+    espacos.sair(uid)
     with cursor(commit=True) as cur:
         cur.execute("DELETE FROM usuarios WHERE id = %s", (uid,))
     if cred:
@@ -1140,6 +1281,19 @@ def _aviso_credencial(info):
     }.get(info["situacao"], openfinance.sem_credencial())
 
 
+@app.get("/api/openfinance/situacao")
+@exige_sessao()
+def situacao_openfinance():
+    """Rápida, só banco local: quantas conexões a pessoa tem. A tela inicial
+    usa para saber, antes de a Pluggy responder, que o saldo virá dos bancos
+    e não deve ser calculado pelos lançamentos enquanto isso."""
+    n = buscar_um(
+        "SELECT COUNT(*) AS n FROM conexoes_bancarias WHERE usuario_id = %s",
+        (g.sessao["usuario_id"],),
+    )["n"]
+    return jsonify({"conexoes": int(n)})
+
+
 @app.get("/api/openfinance")
 @exige_sessao()
 def ler_openfinance():
@@ -1151,9 +1305,13 @@ def ler_openfinance():
     conexoes = _conexoes(g.sessao["usuario_id"])
     cred, info = _credencial(g.sessao["usuario_id"])
 
+    # Conexões lidas em paralelo (cada uma também paraleliza por dentro).
+    # A ordem da resposta segue a da lista.
+    with ThreadPoolExecutor(max_workers=max(1, min(5, len(conexoes)))) as ex:
+        lidas = list(ex.map(lambda c: openfinance.panorama(cred, c["item_id"]), conexoes))
+
     saida = []
-    for c in conexoes:
-        dados, aviso = openfinance.panorama(cred, c["item_id"])
+    for c, (dados, aviso) in zip(conexoes, lidas):
         saida.append({
             "id": c["id"],
             "itemId": c["item_id"],
@@ -1740,6 +1898,7 @@ _TABELAS_ESPERADAS = (
     "usuarios", "sessoes", "transacoes", "orcamentos", "investimentos", "metas",
     "subtarefas", "conexoes_bancarias", "credenciais_pluggy", "regras_categoria",
     "aceites", "descartes", "passkeys", "desafios_webauthn",
+    "espacos", "espaco_membros", "convites",
 )
 
 

@@ -23,6 +23,7 @@ transações importadas para Entradas e Saídas.
 """
 
 import calendar
+from concurrent.futures import ThreadPoolExecutor
 import json
 import re
 import time
@@ -329,13 +330,13 @@ def _cartao(cred, c):
     fechamento = _data(cd.get("balanceCloseDate"))
     vencimento = _data(cd.get("balanceDueDate"))
 
-    faturas = sorted(
-        _todas(cred, "/bills", {"accountId": c["id"]}),
-        key=lambda f: f.get("dueDate") or "",
-        reverse=True,
-    )
+    # Faturas e compras recentes são independentes: pedidas juntas.
     desde = date.today() - timedelta(days=config.PLUGGY_DIAS_PARCELAS)
-    recentes = _transacoes_da_conta(cred, c["id"], desde)
+    with ThreadPoolExecutor(max_workers=2) as ex:
+        f_faturas = ex.submit(_todas, cred, "/bills", {"accountId": c["id"]})
+        f_recentes = ex.submit(_transacoes_da_conta, cred, c["id"], desde)
+        faturas = sorted(f_faturas.result(), key=lambda f: f.get("dueDate") or "", reverse=True)
+        recentes = f_recentes.result()
 
     limite = cd.get("creditLimit")
     livre = cd.get("availableCreditLimit")
@@ -498,14 +499,25 @@ def panorama(cred, item_id) -> tuple[dict | None, str | None]:
     if em_cache:
         return em_cache, None
 
+    # Em paralelo: cada pedido à Pluggy é uma ida e volta inteira, e em fila
+    # elas somavam 10 a 15 segundos com o Meu Pluggy trazendo vários bancos.
+    # A chave de acesso é pega antes, senão cada fio pediria a sua.
     try:
-        item = _item(_chamar(cred, "GET", f"/items/{item_id}"))
-        contas = _todas(cred, "/accounts", {"itemId": item_id})
-        investimentos = _todas(cred, "/investments", {"itemId": item_id})
+        _api_key(cred)
+        with ThreadPoolExecutor(max_workers=3) as ex:
+            f_item = ex.submit(_chamar, cred, "GET", f"/items/{item_id}")
+            f_contas = ex.submit(_todas, cred, "/accounts", {"itemId": item_id})
+            f_invest = ex.submit(_todas, cred, "/investments", {"itemId": item_id})
+            item = _item(f_item.result())
+            contas = f_contas.result()
+            investimentos = f_invest.result()
+        de_credito = [c for c in contas if c.get("type") == "CREDIT"]
+        with ThreadPoolExecutor(max_workers=max(1, min(4, len(de_credito)))) as ex:
+            cartoes = list(ex.map(lambda c: _cartao(cred, c), de_credito))
         dados = {
             **item,
             "contas": [_conta(c) for c in contas if c.get("type") != "CREDIT"],
-            "cartoes": [_cartao(cred, c) for c in contas if c.get("type") == "CREDIT"],
+            "cartoes": cartoes,
             "investimentos": [_investimento(i) for i in investimentos if _investimento_ativo(i)],
         }
     except _FalhaPluggy as e:
