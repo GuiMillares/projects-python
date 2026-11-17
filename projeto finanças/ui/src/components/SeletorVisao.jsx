@@ -1,11 +1,20 @@
-// Eu / cada pessoa do espaço / Juntos. Só aparece para quem está num espaço.
+// Eu / cada pessoa do espaço / Juntos. Quem ainda não está num espaço vê,
+// na tela inicial, só o atalho para convidar (prop convite).
 
-import { User, Users } from "lucide-react";
+import { User, UserPlus, Users } from "lucide-react";
+import { Link } from "react-router-dom";
 import { useVisao } from "../context/VisaoProvider";
 
-export default function SeletorVisao() {
-  const { visao, setVisao, membros, temEspaco } = useVisao();
-  if (!temEspaco) return null;
+export default function SeletorVisao({ convite = false }) {
+  const { visao, setVisao, membros, temEspaco, carregado } = useVisao();
+  if (!temEspaco) {
+    if (!convite || !carregado) return null;
+    return (
+      <Link to="/app/configuracoes#espaco" className="fin-btn fin-btn--ghost fin-btn--sm fin-visao">
+        <UserPlus size={13} /> Convidar seu par
+      </Link>
+    );
+  }
 
   const opcoes = [
     { valor: "eu", rotulo: "Eu", icone: User },

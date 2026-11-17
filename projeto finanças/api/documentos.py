@@ -2,8 +2,11 @@
 
 Os textos moram na API, e não no front, porque é a API que precisa saber
 qual versão está valendo para cobrar o aceite (ver exige_sessao em
-app.py). Mudou algo que muda o sentido? Suba VERSAO: todo mundo aceita de
-novo antes de continuar usando. Correção de digitação não precisa.
+app.py). Subir VERSAO obriga todo mundo a aceitar de novo, então ela só
+sobe quando o sentido muda para quem usa: outro tipo de dado coletado,
+outra finalidade, compartilhamento com quem não estava previsto. Entrega
+nova, texto acrescentado para explicar um recurso, correção: o texto
+muda e VERSAO fica.
 
 Não é parecer jurídico. É o que o app de fato faz com os dados, escrito
 em português claro. Se o app passar a fazer outra coisa (outro serviço

@@ -25,6 +25,7 @@ const OPCOES = [
 export default function NotificacoesCard({ avisar }) {
   const [estado, setEstado] = useState(null);
   const [ocupado, setOcupado] = useState(false);
+  const [erro, setErro] = useState("");
   const bloqueio = impedimento();
 
   const avisarRef = useRef(avisar);
@@ -32,8 +33,14 @@ export default function NotificacoesCard({ avisar }) {
 
   const recarregar = () =>
     lerEstado()
-      .then(setEstado)
-      .catch((e) => avisarRef.current(e.message, "error"));
+      .then((e) => {
+        setErro("");
+        setEstado(e);
+      })
+      .catch((e) => {
+        setErro(e.message);
+        avisarRef.current(e.message, "error");
+      });
 
   useEffect(() => {
     recarregar();
@@ -98,7 +105,16 @@ export default function NotificacoesCard({ avisar }) {
         <Bell size={15} /> Notificações
       </div>
 
-      {!estado ? (
+      {!estado && erro ? (
+        <div className="fin-form__actions">
+          <span className="fin-field__hint" style={{ flex: 1 }}>
+            Não consegui abrir as notificações agora: {erro}
+          </span>
+          <button className="fin-btn fin-btn--ghost fin-btn--sm" onClick={recarregar}>
+            Tentar de novo
+          </button>
+        </div>
+      ) : !estado ? (
         <div className="fin-loading" style={{ padding: "8px 0" }}>
           <Loader2 size={15} className="fin-spin" />
         </div>

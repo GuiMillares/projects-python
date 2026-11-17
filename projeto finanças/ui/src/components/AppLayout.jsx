@@ -17,6 +17,7 @@ import {
   Sun,
   Target,
   TrendingUp,
+  Users,
   Wallet,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -184,6 +185,17 @@ export default function AppLayout({ children }) {
                     }}
                   >
                     <Settings size={14} /> Configurações
+                  </button>
+
+                  <button
+                    className="fin-menu__item"
+                    role="menuitem"
+                    onClick={() => {
+                      navigate("/app/configuracoes#espaco");
+                      setMenuAberto(false);
+                    }}
+                  >
+                    <Users size={14} /> Espaço compartilhado
                   </button>
 
                   <button className="fin-menu__item fin-so-desktop" role="menuitem" onClick={toggleTheme}>

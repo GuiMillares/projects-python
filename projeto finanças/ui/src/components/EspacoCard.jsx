@@ -7,6 +7,7 @@
 
 import { Check, Copy, Crown, Link2, Loader2, LogOut, Share2, Trash2, UserPlus, Users, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { useLocation } from "react-router-dom";
 import ConfirmarExclusao from "./ConfirmarExclusao";
 import {
   aceitarConvite,
@@ -29,15 +30,26 @@ export default function EspacoCard({ avisar }) {
   const [copiado, setCopiado] = useState(false);
   const [paraRemover, setParaRemover] = useState(null);
   const [saindo, setSaindo] = useState(false);
+  const [erro, setErro] = useState("");
+  const secaoRef = useRef(null);
+  const { hash } = useLocation();
 
   const avisarRef = useRef(avisar);
   avisarRef.current = avisar;
 
-  useEffect(() => {
+  const carregar = () => {
+    setErro("");
     lerEspaco()
       .then(setDados)
-      .catch((e) => avisarRef.current(e.message, "error"));
-  }, []);
+      .catch((e) => setErro(e.message));
+  };
+
+  useEffect(carregar, []);
+
+  // Atalho do menu da conta e da tela inicial: /app/configuracoes#espaco
+  useEffect(() => {
+    if (hash === "#espaco") secaoRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [hash, dados]);
 
   const executar = async (acao, sucesso) => {
     setOcupado(true);
@@ -93,13 +105,24 @@ export default function EspacoCard({ avisar }) {
 
   if (!dados) {
     return (
-      <section className="fin-card fin-cfg-largo">
+      <section id="espaco" ref={secaoRef} className="fin-card fin-cfg-largo">
         <div className="fin-cfg-card__title">
           <Users size={15} /> Espaço compartilhado
         </div>
-        <div className="fin-loading" style={{ padding: "8px 0" }}>
-          <Loader2 size={15} className="fin-spin" />
-        </div>
+        {erro ? (
+          <div className="fin-form__actions">
+            <span className="fin-field__hint" style={{ flex: 1 }}>
+              Não consegui abrir o espaço agora: {erro}
+            </span>
+            <button className="fin-btn fin-btn--ghost fin-btn--sm" onClick={carregar}>
+              Tentar de novo
+            </button>
+          </div>
+        ) : (
+          <div className="fin-loading" style={{ padding: "8px 0" }}>
+            <Loader2 size={15} className="fin-spin" />
+          </div>
+        )}
       </section>
     );
   }
@@ -110,7 +133,7 @@ export default function EspacoCard({ avisar }) {
   const outros = membros.filter((m) => !m.eu);
 
   return (
-    <section className="fin-card fin-cfg-largo">
+    <section id="espaco" ref={secaoRef} className="fin-card fin-cfg-largo">
       <div className="fin-cfg-card__title">
         <Users size={15} /> Espaço compartilhado
       </div>

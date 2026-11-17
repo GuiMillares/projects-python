@@ -16,6 +16,7 @@ const VisaoContext = createContext({
   membros: [],
   nomeDe: () => "",
   temEspaco: false,
+  carregado: false,
 });
 
 const lerSalva = () => {
@@ -29,6 +30,7 @@ const lerSalva = () => {
 export function VisaoProvider({ children }) {
   const [visao, setVisaoEstado] = useState(lerSalva);
   const [membros, setMembros] = useState([]);
+  const [carregado, setCarregado] = useState(false);
 
   useEffect(() => {
     api
@@ -36,6 +38,7 @@ export function VisaoProvider({ children }) {
       .then((r) => {
         const lista = r.membros || [];
         setMembros(lista);
+        setCarregado(true);
         // Membro escolhido antes não está mais no espaço: volta para "eu".
         setVisaoEstado((v) =>
           v === "eu" || (v === "juntos" && lista.length > 1) || lista.some((m) => String(m.id) === v && !m.eu)
@@ -63,7 +66,7 @@ export function VisaoProvider({ children }) {
 
   return (
     <VisaoContext.Provider
-      value={{ visao, setVisao, membros, nomeDe, temEspaco: membros.length > 1 }}
+      value={{ visao, setVisao, membros, nomeDe, temEspaco: membros.length > 1, carregado }}
     >
       {children}
     </VisaoContext.Provider>

@@ -550,7 +550,7 @@ function CabecalhoPagina({ hoje, sync }) {
           {mes.charAt(0).toUpperCase() + mes.slice(1)} · {TEXTO_SYNC[sync] || "atualizado agora"}
         </p>
       </div>
-      <SeletorVisao />
+      <SeletorVisao convite />
     </div>
   );
 }
