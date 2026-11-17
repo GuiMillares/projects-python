@@ -156,9 +156,15 @@ def logout():
 @app.post("/api/auth/2fa/setup")
 @exige_sessao(completa=False)
 def setup_2fa():
-    """Gera o segredo e devolve só o otpauth:// para virar QR code."""
+    """Devolve o otpauth:// do cadastro (QR code, link e chave na tela).
+
+    Recusa quem já tem 2FA confirmado: trocar o autenticador exige a sessão
+    completa e passa por desativar o 2FA em Configurações, com o código.
+    """
     sessao = g.sessao
     uri = seguranca.gerar_segredo(sessao["usuario_id"], sessao["email"])
+    if uri is None:
+        return erro("A verificação em duas etapas já está ativa nesta conta.", 409)
     return jsonify({"otpauthUri": uri})
 
 
@@ -167,6 +173,13 @@ def setup_2fa():
 def verificar_2fa():
     sessao = g.sessao
     codigo = (request.get_json(silent=True) or {}).get("codigo", "")
+
+    # O mesmo bloqueio do login vale aqui. Sem ele, quem tem só a senha
+    # chutava códigos de 6 dígitos à vontade enquanto a sessão parcial
+    # durasse: registrar a falha sem conferir o bloqueio não trava nada.
+    usuario = buscar_um("SELECT bloqueado_ate FROM usuarios WHERE id = %s", (sessao["usuario_id"],))
+    if usuario and seguranca.esta_bloqueado(usuario):
+        return erro("Muitas tentativas. Tente de novo em alguns minutos.", 429)
 
     if not seguranca.conferir_codigo(sessao["usuario_id"], codigo):
         seguranca.registrar_falha(sessao["usuario_id"])

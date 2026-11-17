@@ -6,7 +6,18 @@
 // só abre as rotas de 2FA. Nenhum dado financeiro é acessível antes de o
 // servidor validar o código (ver api/app.py → exige_sessao).
 
-import { ArrowLeft, Eye, EyeOff, KeyRound, Loader2, ShieldCheck, Wallet } from "lucide-react";
+import {
+  ArrowLeft,
+  Check,
+  Copy,
+  ExternalLink,
+  Eye,
+  EyeOff,
+  KeyRound,
+  Loader2,
+  ShieldCheck,
+  Wallet,
+} from "lucide-react";
 import QRCode from "qrcode";
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
@@ -34,6 +45,7 @@ export default function Login() {
   const [mostrarSenha, setMostrarSenha] = useState(false);
   const [codigo, setCodigo] = useState("");
   const [qrDataUrl, setQrDataUrl] = useState("");
+  const [otpauth, setOtpauth] = useState("");
   const [erro, setErro] = useState("");
   const [carregando, setCarregando] = useState(false);
   const codigoRef = useRef(null);
@@ -55,6 +67,7 @@ export default function Login() {
 
   const abrirSetup2FA = async () => {
     const uri = await iniciarSetup2FA();
+    setOtpauth(uri);
     setQrDataUrl(await QRCode.toDataURL(uri, { margin: 0, width: 320 }));
     setStep("setup2fa");
   };
@@ -102,6 +115,7 @@ export default function Login() {
     setCodigo("");
     setSenha("");
     setQrDataUrl("");
+    setOtpauth("");
     setErro("");
   };
 
@@ -117,8 +131,8 @@ export default function Login() {
             Cada real, <em>onde você deixou</em>.
           </h1>
           <p className="fin-login__sub">
-            Entradas, saídas, investimentos e metas, no seu computador, no seu banco
-            de dados, sem intermediário.
+            Entradas, saídas, contas, investimentos e metas num lugar só, com a sua
+            conta protegida em duas etapas.
           </p>
         </div>
 
@@ -261,14 +275,22 @@ export default function Login() {
               </div>
 
               <p className="fin-login__hint">
-                Leia o QR code no Google Authenticator, Authy ou 1Password e digite o
-                código gerado. A partir daí ele será pedido a cada vez que você abrir o
-                painel.
+                Cadastre o Lastro num app autenticador (Google Authenticator, Authy, 1Password
+                ou as Senhas do iPhone) e digite o código de 6 dígitos que ele mostrar. A partir
+                daí o código é pedido a cada login.
               </p>
 
-              {qrDataUrl && (
-                <img src={qrDataUrl} alt="QR code para configurar o autenticador" className="fin-qr" />
-              )}
+              {/* No celular não dá para ler o QR com o próprio celular: lá o
+                  link e a chave vêm primeiro (ordem no CSS). */}
+              <div className="fin-setup2fa">
+                {qrDataUrl && (
+                  <div className="fin-setup2fa__qr">
+                    <span className="fin-setup2fa__rotulo">Em outro aparelho, leia o QR code:</span>
+                    <img src={qrDataUrl} alt="QR code para configurar o autenticador" className="fin-qr" />
+                  </div>
+                )}
+                {otpauth && <CadastroNoCelular uri={otpauth} />}
+              </div>
 
               {erro && <ErroBox texto={erro} />}
 
@@ -307,6 +329,64 @@ export default function Login() {
           </p>
         </div>
       </main>
+    </div>
+  );
+}
+
+// Cadastro do autenticador no mesmo aparelho. O link otpauth:// abre o app
+// autenticador instalado (no iPhone, também as Senhas do sistema). Se nada
+// abrir, a chave vai à mão em "inserir chave de configuração".
+function CadastroNoCelular({ uri }) {
+  const [copiada, setCopiada] = useState(false);
+
+  let chave = "";
+  try {
+    chave = new URL(uri).searchParams.get("secret") || "";
+  } catch {
+    chave = "";
+  }
+  // Em grupos de 4, como os apps mostram: menos chance de pular letra.
+  const chaveLegivel = chave.replace(/(.{4})/g, "$1 ").trim();
+
+  const copiar = async () => {
+    try {
+      await navigator.clipboard.writeText(chave);
+      setCopiada(true);
+      setTimeout(() => setCopiada(false), 2500);
+    } catch {
+      // Sem permissão de área de transferência: a chave segue na tela,
+      // selecionável, para copiar à mão.
+    }
+  };
+
+  return (
+    <div className="fin-setup2fa__celular">
+      <span className="fin-setup2fa__rotulo">Neste aparelho:</span>
+      <a href={uri} className="fin-btn fin-btn--primary fin-btn--block">
+        <ExternalLink size={14} /> Abrir no app autenticador
+      </a>
+      {chave && (
+        <div className="fin-setup2fa__chave">
+          <span className="fin-setup2fa__rotulo">
+            Não abriu? No app, escolha inserir chave de configuração e use:
+          </span>
+          <div className="fin-setup2fa__chave-linha">
+            <code className="fin-num">{chaveLegivel}</code>
+            <button
+              type="button"
+              className="fin-icon-btn"
+              onClick={copiar}
+              aria-label="Copiar a chave"
+              title="Copiar"
+            >
+              {copiada ? <Check size={14} /> : <Copy size={14} />}
+            </button>
+          </div>
+        </div>
+      )}
+      <span className="fin-field__hint">
+        Depois volte para cá e digite o código de 6 dígitos.
+      </span>
     </div>
   );
 }

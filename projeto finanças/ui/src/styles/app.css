@@ -67,6 +67,8 @@ textarea {
 
 /* ── Botões ────────────────────────────────────────────────── */
 .fin-btn {
+  /* Também usado em <a> (ex.: abrir o app autenticador). */
+  text-decoration: none;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -500,6 +502,57 @@ textarea {
   font-weight: 600;
   letter-spacing: 0.34em;
   text-indent: 0.34em;
+}
+
+/* Cadastro do 2FA: QR para outro aparelho, link e chave para este.
+   No celular o link vem primeiro, porque o QR ali não serve para nada. */
+.fin-setup2fa {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.fin-setup2fa__qr,
+.fin-setup2fa__celular,
+.fin-setup2fa__chave {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.fin-setup2fa__celular {
+  order: -1;
+}
+
+.fin-setup2fa__rotulo {
+  font-size: 12px;
+  color: var(--fin-muted);
+}
+
+.fin-setup2fa__chave-linha {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--fin-border-mid);
+  border-radius: var(--fin-radius);
+  background: var(--fin-bg-3);
+}
+
+.fin-setup2fa__chave-linha code {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  overflow-wrap: anywhere;
+  user-select: all;
+  color: var(--fin-text);
+}
+
+@media (min-width: 900px) {
+  .fin-setup2fa__celular {
+    order: 0;
+  }
 }
 
 .fin-qr {

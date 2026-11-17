@@ -124,19 +124,35 @@ INTERVALO = 30
 JANELA = 1  # aceita ±30s de desvio de relógio
 
 
-def gerar_segredo(usuario_id: int, email: str) -> str:
-    """Cria segredo novo e devolve o otpauth://. O segredo em si fica.
+def gerar_segredo(usuario_id: int, email: str):
+    """Devolve o otpauth:// do cadastro do autenticador, ou None.
 
-    Enquanto `totp_confirmado` for 0, o segredo está apenas provisório:
-    o login continua exigindo o cadastro até alguém acertar um código.
+    None quando o 2FA já está confirmado: aí a rota de cadastro NÃO pode
+    trocar o segredo. Sem essa trava, quem soubesse só a senha abria a
+    sessão parcial, chamava o cadastro, punha o próprio autenticador no
+    lugar e passava pelo 2FA da vítima.
+
+    Com cadastro pendente (`totp_confirmado` = 0 e segredo já gerado), o
+    MESMO segredo volta. No celular a pessoa sai para o app autenticador e,
+    se a página recarregar na volta, um segredo novo invalidaria o que ela
+    acabou de cadastrar.
     """
-    segredo = pyotp.random_base32()
     with cursor(commit=True) as cur:
         cur.execute(
-            "UPDATE usuarios SET totp_secret = %s, totp_confirmado = 0, "
-            "totp_ultimo_step = NULL WHERE id = %s",
-            (segredo, usuario_id),
+            "SELECT totp_secret, totp_confirmado FROM usuarios WHERE id = %s FOR UPDATE",
+            (usuario_id,),
         )
+        atual = cur.fetchone()
+        if not atual or atual["totp_confirmado"]:
+            return None
+        segredo = atual["totp_secret"]
+        if not segredo:
+            segredo = pyotp.random_base32()
+            cur.execute(
+                "UPDATE usuarios SET totp_secret = %s, totp_confirmado = 0, "
+                "totp_ultimo_step = NULL WHERE id = %s",
+                (segredo, usuario_id),
+            )
     return pyotp.TOTP(segredo, interval=INTERVALO).provisioning_uri(
         name=email, issuer_name=config.EMISSOR_TOTP
     )
@@ -196,13 +212,20 @@ def esta_bloqueado(usuario) -> bool:
 
 
 def registrar_falha(usuario_id: int):
-    """Na enésima falha seguida, tranca a conta por alguns minutos."""
+    """Na enésima falha seguida, tranca a conta por alguns minutos.
+
+    A ORDEM do SET importa: o MySQL aplica as atribuições da esquerda para
+    a direita, e cada uma já enxerga o valor novo das anteriores. Com o
+    incremento primeiro, o CASE via tentativas já somada e travava uma
+    falha antes do limite.
+    """
     with cursor(commit=True) as cur:
         cur.execute(
-            "UPDATE usuarios SET tentativas = tentativas + 1, "
+            "UPDATE usuarios SET "
             "bloqueado_ate = CASE WHEN tentativas + 1 >= %s "
             "                     THEN DATE_ADD(NOW(), INTERVAL %s MINUTE) "
-            "                     ELSE bloqueado_ate END "
+            "                     ELSE bloqueado_ate END, "
+            "tentativas = tentativas + 1 "
             "WHERE id = %s",
             (config.MAX_TENTATIVAS, config.BLOQUEIO_MINUTOS, usuario_id),
         )
