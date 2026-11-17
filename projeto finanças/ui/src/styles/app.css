@@ -1808,6 +1808,137 @@ textarea {
   border-top: 1px solid var(--fin-border);
 }
 
+/* ── Primeiros passos (Contas sem nenhuma conexão) ──
+   Uma lista vertical com fio entre os passos. O passo atual tem a marca
+   cheia no acento; os feitos, só o check; os próximos ficam apagados.
+   Nada de card dentro de card: é um card só, com divisórias. */
+.fin-passos__intro {
+  font-size: 12.5px;
+  color: var(--fin-muted);
+  margin: 0 0 6px;
+  max-width: 64ch;
+}
+
+.fin-passos__lista {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.fin-passo + .fin-passo {
+  border-top: 1px solid var(--fin-border);
+}
+
+.fin-passo__cab {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  width: 100%;
+  padding: 12px 0;
+  background: none;
+  border: 0;
+  color: var(--fin-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.fin-passo__cab:disabled {
+  cursor: default;
+}
+
+.fin-passo__marca {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 1px solid var(--fin-border-mid);
+  font-family: var(--fin-font-num);
+  font-size: 11.5px;
+  color: var(--fin-muted);
+}
+
+.fin-passo__titulo {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.fin-passo__seta {
+  flex-shrink: 0;
+  color: var(--fin-muted);
+}
+
+.fin-passo--atual .fin-passo__marca {
+  background: var(--fin-accent);
+  border-color: var(--fin-accent);
+  color: var(--fin-accent-ink);
+  font-weight: 700;
+}
+
+.fin-passo--feito .fin-passo__marca {
+  border-color: var(--fin-accent-mid);
+  background: var(--fin-accent-dim);
+  color: var(--fin-accent);
+}
+
+.fin-passo--feito .fin-passo__titulo,
+.fin-passo--depois .fin-passo__titulo {
+  font-weight: 500;
+  color: var(--fin-muted);
+}
+
+/* O corpo alinha com o título, não com a marca: o olho segue a coluna. */
+.fin-passo__corpo {
+  padding: 0 0 14px 35px;
+  font-size: 12.5px;
+  color: var(--fin-text);
+  max-width: calc(68ch + 35px);
+}
+
+.fin-passo__corpo p {
+  margin: 0 0 8px;
+}
+
+.fin-passo__corpo a {
+  color: var(--fin-accent);
+}
+
+.fin-passo__corpo .fin-form {
+  margin-top: 10px;
+}
+
+.fin-passo__corpo .fin-form__actions {
+  margin-top: 10px;
+}
+
+.fin-passos__sub {
+  margin: 0 0 10px;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.fin-passos__nota {
+  font-size: 11.5px;
+  color: var(--fin-muted);
+}
+
+.fin-passos__alerta {
+  margin: 4px 0 10px;
+}
+
+/* No celular a marca encolhe o recuo, senão o texto fica estreito a 320px. */
+@media (max-width: 479px) {
+  .fin-passo__corpo {
+    padding-left: 0;
+  }
+}
+
 .fin-of-cartao {
   border-top: 1px solid var(--fin-border);
 }

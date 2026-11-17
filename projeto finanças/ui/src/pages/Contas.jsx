@@ -170,8 +170,16 @@ export default function Contas() {
       if (widget?.conexaoId) {
         notificar("Conexão renovada.");
       } else {
+        const primeira = conexoes.length === 0;
         const r = await conectar(item.id);
-        notificar(`${r.instituicao} conectado.`);
+        // Fim do guia: a primeira conexão já abre a importação, que é o
+        // que faz as transações aparecerem em Entradas e Saídas.
+        if (primeira) {
+          setImportAberto(true);
+          notificar(`${r.instituicao} conectado. Agora traga suas transações.`);
+        } else {
+          notificar(`${r.instituicao} conectado.`);
+        }
       }
       releiturasRef.current = 0;
       await carregar({ silencioso: true });
@@ -309,7 +317,8 @@ export default function Contas() {
 
       {/* Credencial ausente não vira banner: o próprio cartão de cadastro,
           logo abaixo, explica o que falta. */}
-      {!disponivel && credencial?.situacao !== "ausente" && (
+      {/* Sem conexão nenhuma, o guia mostra o aviso no passo certo. */}
+      {conexoes.length > 0 && !disponivel && credencial?.situacao !== "ausente" && (
         <div className="fin-banner" style={{ "--bc": "var(--fin-warn)" }}>
           <CloudOff size={16} />
           <span>{resposta?.aviso}</span>
@@ -394,82 +403,94 @@ export default function Contas() {
       )}
 
       {/* ── Conexões ── */}
-      <div className="fin-of-lista">
-        {/* Sem credencial, cadastrar é o primeiro passo; com ela, o cartão
-            desce para o fim e vira só "trocar / remover". */}
-        {!credencialPronta && cartaoCredencial}
+      {conexoes.length === 0 ? (
+        <PrimeirosPassos
+          credencial={credencial}
+          disponivel={disponivel}
+          aviso={resposta?.aviso}
+          abrindoWidget={abrindoWidget}
+          onConectar={() => abrirWidget()}
+          notificar={notificar}
+          onMudou={() => carregar({ silencioso: true })}
+        />
+      ) : (
+        <div className="fin-of-lista">
+          {/* Sem credencial, cadastrar é o primeiro passo; com ela, o cartão
+              desce para o fim e vira só "trocar / remover". */}
+          {!credencialPronta && cartaoCredencial}
 
-        {conexoes.map((c) => (
-          <Conexao
-            key={c.id}
-            c={c}
-            ocupado={sincronizando.has(c.id)}
-            onSincronizar={() => sincronizarConexao(c)}
-            onReconectar={() => abrirWidget(c.id)}
-            onRemover={() => setParaRemover(c)}
-          />
-        ))}
+          {conexoes.map((c) => (
+            <Conexao
+              key={c.id}
+              c={c}
+              ocupado={sincronizando.has(c.id)}
+              onSincronizar={() => sincronizarConexao(c)}
+              onReconectar={() => abrirWidget(c.id)}
+              onRemover={() => setParaRemover(c)}
+            />
+          ))}
 
-        <div className="fin-card">
-          <div className="fin-cfg-card__title">
-            <Plug size={15} /> {conexoes.length ? "Adicionar outra conexão" : "Conectar o Open Finance"}
+          <div className="fin-card">
+            <div className="fin-cfg-card__title">
+              <Plug size={15} /> {conexoes.length ? "Adicionar outra conexão" : "Conectar o Open Finance"}
+            </div>
+            <p className="fin-of-nota" style={{ marginTop: 0, marginBottom: 12 }}>
+              Abre a janela da Pluggy. Escolha Meu Pluggy para trazer de uma vez todos os bancos
+              que você já ligou lá, ou um banco direto. O consentimento é dado no app do banco.
+            </p>
+            <button
+              className="fin-btn fin-btn--primary fin-btn--sm"
+              onClick={() => abrirWidget()}
+              disabled={!disponivel || abrindoWidget}
+            >
+              {abrindoWidget ? (
+                <>
+                  <Loader2 size={13} className="fin-spin" /> Abrindo...
+                </>
+              ) : (
+                <>
+                  <Link2 size={13} /> Conectar banco
+                </>
+              )}
+            </button>
+
+            <form className="fin-form fin-of-manual" onSubmit={adicionar}>
+              <div className="fin-field">
+                <label htmlFor="of-item">Ou cole o id de uma conexão que já existe</label>
+                <input
+                  id="of-item"
+                  value={novoId}
+                  onChange={(e) => setNovoId(e.target.value.trim())}
+                  placeholder="00000000-0000-0000-0000-000000000000"
+                  spellCheck={false}
+                  autoComplete="off"
+                  disabled={!disponivel}
+                  required
+                />
+                <span className="fin-field__hint">O id do item, no formato 8-4-4-4-12.</span>
+              </div>
+              <div className="fin-form__actions">
+                <button
+                  className="fin-btn fin-btn--ghost fin-btn--sm"
+                  disabled={!disponivel || conectando || !novoId}
+                >
+                  {conectando ? (
+                    <>
+                      <Loader2 size={13} className="fin-spin" /> Conferindo...
+                    </>
+                  ) : (
+                    <>
+                      <Check size={13} /> Adicionar
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
           </div>
-          <p className="fin-of-nota" style={{ marginTop: 0, marginBottom: 12 }}>
-            Abre a janela da Pluggy. Escolha Meu Pluggy para trazer de uma vez todos os bancos
-            que você já ligou lá, ou um banco direto. O consentimento é dado no app do banco.
-          </p>
-          <button
-            className="fin-btn fin-btn--primary fin-btn--sm"
-            onClick={() => abrirWidget()}
-            disabled={!disponivel || abrindoWidget}
-          >
-            {abrindoWidget ? (
-              <>
-                <Loader2 size={13} className="fin-spin" /> Abrindo...
-              </>
-            ) : (
-              <>
-                <Link2 size={13} /> Conectar banco
-              </>
-            )}
-          </button>
 
-          <form className="fin-form fin-of-manual" onSubmit={adicionar}>
-            <div className="fin-field">
-              <label htmlFor="of-item">Ou cole o id de uma conexão que já existe</label>
-              <input
-                id="of-item"
-                value={novoId}
-                onChange={(e) => setNovoId(e.target.value.trim())}
-                placeholder="00000000-0000-0000-0000-000000000000"
-                spellCheck={false}
-                autoComplete="off"
-                disabled={!disponivel}
-                required
-              />
-              <span className="fin-field__hint">O id do item, no formato 8-4-4-4-12.</span>
-            </div>
-            <div className="fin-form__actions">
-              <button
-                className="fin-btn fin-btn--ghost fin-btn--sm"
-                disabled={!disponivel || conectando || !novoId}
-              >
-                {conectando ? (
-                  <>
-                    <Loader2 size={13} className="fin-spin" /> Conferindo...
-                  </>
-                ) : (
-                  <>
-                    <Check size={13} /> Adicionar
-                  </>
-                )}
-              </button>
-            </div>
-          </form>
+          {credencialPronta && cartaoCredencial}
         </div>
-
-        {credencialPronta && cartaoCredencial}
-      </div>
+      )}
 
       {/* Sem includeSandbox: os bancos de teste da Pluggy só confundiriam
           a lista de um app que usa dado real. */}
@@ -540,18 +561,236 @@ function ResultadoImportacao({ r, onConferir }) {
   );
 }
 
-// Cada pessoa lê os próprios bancos com a própria aplicação na Pluggy: é a
-// regra do Meu Pluggy gratuito, que é intransferível. Este cartão é onde a
-// credencial entra (e sai). O segredo vai para a API, que testa na Pluggy,
-// cifra e nunca devolve.
-function CredencialPluggy({ credencial, notificar, onMudou }) {
-  const pronta = credencial.situacao === "ok";
-  const [editando, setEditando] = useState(!pronta);
+// ── Primeiros passos ──
+// Quem chega sem nenhuma conexão vê um guia em vez dos cartões soltos. O
+// app só consegue ver sozinho os passos 3 (credencial salva) e 4 (banco
+// conectado); os dois primeiros acontecem no site da Pluggy, e a própria
+// pessoa marca "já fiz". Essa marca é conveniência deste aparelho, por
+// isso fica no localStorage e falhar ao ler não quebra nada.
+const CHAVE_PASSOS = "fin_passos_pluggy";
+
+const lerPassosFeitos = () => {
+  try {
+    return JSON.parse(localStorage.getItem(CHAVE_PASSOS)) || {};
+  } catch {
+    return {};
+  }
+};
+
+function PrimeirosPassos({ credencial, disponivel, aviso, abrindoWidget, onConectar, notificar, onMudou }) {
+  const [marcados, setMarcados] = useState(lerPassosFeitos);
+  const [abertos, setAbertos] = useState(() => new Set());
+
+  const semChave = credencial?.situacao === "semChave";
+  const credencialPronta = credencial?.situacao === "ok";
+
+  const feito = {
+    1: credencialPronta || !!marcados[1],
+    2: credencialPronta || !!marcados[2],
+    3: credencialPronta,
+    4: false,
+  };
+  const atual = [1, 2, 3, 4].find((n) => !feito[n]);
+
+  const marcar = (n) => {
+    const novos = { ...marcados, [n]: true };
+    setMarcados(novos);
+    try {
+      localStorage.setItem(CHAVE_PASSOS, JSON.stringify(novos));
+    } catch {
+      // Sem armazenamento: vale só nesta visita.
+    }
+  };
+
+  const alternar = (n) =>
+    setAbertos((s) => {
+      const novo = new Set(s);
+      novo.has(n) ? novo.delete(n) : novo.add(n);
+      return novo;
+    });
+
+  const passos = [
+    {
+      n: 1,
+      titulo: "Crie sua conta no Meu Pluggy e ligue seus bancos",
+      corpo: (
+        <>
+          <p>
+            Entre em{" "}
+            <a href="https://meu.pluggy.ai/" target="_blank" rel="noreferrer">
+              meu.pluggy.ai
+            </a>
+            , crie a conta com o seu e-mail e conecte cada banco seu. A autorização é dada no app do
+            próprio banco.
+          </p>
+          <p className="fin-passos__nota">
+            É gratuito, pessoal e intransferível: só contas no seu nome, até 5. Cada pessoa da casa
+            faz o próprio.
+          </p>
+        </>
+      ),
+      acao: !feito[1] && (
+        <button className="fin-btn fin-btn--primary fin-btn--sm" onClick={() => marcar(1)}>
+          <Check size={13} /> Já fiz
+        </button>
+      ),
+    },
+    {
+      n: 2,
+      titulo: "Crie sua aplicação na Pluggy",
+      corpo: (
+        <>
+          <ol className="fin-passos__sub">
+            <li>
+              Crie uma conta em{" "}
+              <a href="https://dashboard.pluggy.ai/" target="_blank" rel="noreferrer">
+                dashboard.pluggy.ai
+              </a>
+              . Começa um teste de 15 dias; a leitura dos seus bancos continua depois dele.
+            </li>
+            <li>
+              Na aba <strong>Customization</strong>, inclua o conector <strong>MeuPluggy</strong> na
+              lista de conectores.
+            </li>
+            <li>
+              Em <strong>Applications</strong>, crie uma aplicação de desenvolvimento.
+            </li>
+          </ol>
+          <div className="fin-banner fin-passos__alerta" style={{ "--bc": "var(--fin-warn)" }}>
+            <AlertTriangle size={15} />
+            <span>
+              O <strong>Client Secret</strong> aparece uma vez só, quando a aplicação é criada.
+              Copie antes de fechar a janela e guarde num lugar seguro.
+            </span>
+          </div>
+          <p className="fin-passos__nota">
+            Detalhes no{" "}
+            <a href="https://github.com/pluggyai/meu-pluggy" target="_blank" rel="noreferrer">
+              guia da Pluggy
+            </a>
+            .
+          </p>
+        </>
+      ),
+      acao: !feito[2] && (
+        <button className="fin-btn fin-btn--primary fin-btn--sm" onClick={() => marcar(2)}>
+          <Check size={13} /> Já fiz
+        </button>
+      ),
+    },
+    {
+      n: 3,
+      titulo: "Cole aqui o Client ID e o Client Secret",
+      corpo: semChave ? (
+        <div className="fin-banner fin-passos__alerta" style={{ "--bc": "var(--fin-warn)" }}>
+          <CloudOff size={15} />
+          <span>{aviso || "O servidor ainda não está pronto para guardar credenciais."}</span>
+        </div>
+      ) : credencialPronta ? (
+        <p>Credencial conferida na Pluggy e guardada cifrada. O segredo não aparece de novo.</p>
+      ) : (
+        <>
+          <p>
+            Os dois ficam na página da aplicação que você criou. O app confere na Pluggy antes de
+            salvar e guarda o segredo cifrado.
+          </p>
+          {credencial?.situacao === "ilegivel" && (
+            <p className="fin-passos__nota">
+              A credencial guardada não abre mais (a chave do servidor mudou). Cadastre de novo.
+            </p>
+          )}
+          <FormCredencial notificar={notificar} onSalvo={onMudou} />
+        </>
+      ),
+    },
+    {
+      n: 4,
+      titulo: "Conecte seus bancos",
+      corpo: (
+        <>
+          <p>
+            Abre a janela da Pluggy. Procure <strong>MeuPluggy</strong> e autorize: os bancos que você
+            ligou no passo 1 chegam juntos. Se algum não vier, conecte de novo e escolha o outro.
+          </p>
+          {credencialPronta && !disponivel && aviso && (
+            <div className="fin-banner fin-passos__alerta" style={{ "--bc": "var(--fin-warn)" }}>
+              <CloudOff size={15} />
+              <span>{aviso}</span>
+            </div>
+          )}
+          <p className="fin-passos__nota">
+            Depois disso o app pede o histórico para trazer suas transações para Entradas e Saídas.
+          </p>
+        </>
+      ),
+      acao: (
+        <button
+          className="fin-btn fin-btn--primary fin-btn--sm"
+          onClick={onConectar}
+          disabled={!credencialPronta || !disponivel || abrindoWidget}
+        >
+          {abrindoWidget ? (
+            <>
+              <Loader2 size={13} className="fin-spin" /> Abrindo...
+            </>
+          ) : (
+            <>
+              <Link2 size={13} /> Conectar banco
+            </>
+          )}
+        </button>
+      ),
+    },
+  ];
+
+  return (
+    <div className="fin-card fin-passos">
+      <div className="fin-cfg-card__title">
+        <Plug size={15} /> Comece por aqui
+      </div>
+      <p className="fin-passos__intro">
+        Uma vez só, uns 15 minutos. Ao fim, saldos, faturas e transações dos seus bancos aparecem
+        aqui sozinhos.
+      </p>
+
+      <ol className="fin-passos__lista">
+        {passos.map((p) => {
+          const aberto = p.n === atual || abertos.has(p.n);
+          const estado = feito[p.n] ? "feito" : p.n === atual ? "atual" : "depois";
+          return (
+            <li key={p.n} className={`fin-passo fin-passo--${estado}`}>
+              <button
+                className="fin-passo__cab"
+                onClick={() => p.n !== atual && alternar(p.n)}
+                aria-expanded={aberto}
+                disabled={p.n === atual}
+              >
+                <span className="fin-passo__marca" aria-hidden="true">
+                  {feito[p.n] ? <Check size={13} /> : p.n}
+                </span>
+                <span className="fin-passo__titulo">{p.titulo}</span>
+                {p.n !== atual && <ChevronDown size={14} className="fin-passo__seta" />}
+              </button>
+              {aberto && (
+                <div className="fin-passo__corpo">
+                  {p.corpo}
+                  {p.acao && <div className="fin-form__actions">{p.acao}</div>}
+                </div>
+              )}
+            </li>
+          );
+        })}
+      </ol>
+    </div>
+  );
+}
+
+// Formulário da credencial, usado no guia e no cartão de trocar. O segredo
+// vai para a API, que testa na Pluggy, cifra e nunca devolve.
+function FormCredencial({ notificar, onSalvo, onCancelar }) {
   const [clientId, setClientId] = useState("");
   const [segredo, setSegredo] = useState("");
   const [salvando, setSalvando] = useState(false);
-  const [paraRemover, setParaRemover] = useState(false);
-  const [removendo, setRemovendo] = useState(false);
 
   const salvar = async (e) => {
     e.preventDefault();
@@ -560,15 +799,73 @@ function CredencialPluggy({ credencial, notificar, onMudou }) {
       await salvarCredencial(clientId.trim(), segredo.trim());
       setSegredo("");
       setClientId("");
-      setEditando(false);
       notificar("Credencial da Pluggy conferida e salva.");
-      await onMudou();
+      await onSalvo();
     } catch (err) {
       notificar(err.message, "error");
     } finally {
       setSalvando(false);
     }
   };
+
+  return (
+    <form className="fin-form" onSubmit={salvar}>
+      <div className="fin-form__row">
+        <div className="fin-field">
+          <label htmlFor="pl-id">Client ID</label>
+          <input
+            id="pl-id"
+            value={clientId}
+            onChange={(e) => setClientId(e.target.value.trim())}
+            placeholder="00000000-0000-0000-0000-000000000000"
+            spellCheck={false}
+            autoComplete="off"
+            required
+          />
+        </div>
+        <div className="fin-field">
+          <label htmlFor="pl-segredo">Client Secret</label>
+          <input
+            id="pl-segredo"
+            type="password"
+            value={segredo}
+            onChange={(e) => setSegredo(e.target.value)}
+            spellCheck={false}
+            autoComplete="off"
+            required
+          />
+        </div>
+      </div>
+      <div className="fin-form__actions">
+        <button className="fin-btn fin-btn--primary fin-btn--sm" disabled={salvando || !clientId || !segredo}>
+          {salvando ? (
+            <>
+              <Loader2 size={13} className="fin-spin" /> Conferindo na Pluggy...
+            </>
+          ) : (
+            <>
+              <Check size={13} /> Salvar
+            </>
+          )}
+        </button>
+        {onCancelar && (
+          <button type="button" className="fin-btn fin-btn--ghost fin-btn--sm" onClick={onCancelar}>
+            Cancelar
+          </button>
+        )}
+      </div>
+    </form>
+  );
+}
+
+// Cada pessoa lê os próprios bancos com a própria aplicação na Pluggy: é a
+// regra do Meu Pluggy gratuito, que é intransferível. Este cartão aparece
+// quando já existe conexão: é onde a credencial é trocada ou removida.
+function CredencialPluggy({ credencial, notificar, onMudou }) {
+  const pronta = credencial.situacao === "ok";
+  const [editando, setEditando] = useState(!pronta);
+  const [paraRemover, setParaRemover] = useState(false);
+  const [removendo, setRemovendo] = useState(false);
 
   const remover = async () => {
     setRemovendo(true);
@@ -647,59 +944,14 @@ function CredencialPluggy({ credencial, notificar, onMudou }) {
               A credencial guardada não abre mais (a chave do servidor mudou). Cadastre de novo.
             </p>
           )}
-          <form className="fin-form" onSubmit={salvar}>
-            <div className="fin-form__row">
-              <div className="fin-field">
-                <label htmlFor="pl-id">Client ID</label>
-                <input
-                  id="pl-id"
-                  value={clientId}
-                  onChange={(e) => setClientId(e.target.value.trim())}
-                  placeholder="00000000-0000-0000-0000-000000000000"
-                  spellCheck={false}
-                  autoComplete="off"
-                  required
-                />
-              </div>
-              <div className="fin-field">
-                <label htmlFor="pl-segredo">Client Secret</label>
-                <input
-                  id="pl-segredo"
-                  type="password"
-                  value={segredo}
-                  onChange={(e) => setSegredo(e.target.value)}
-                  spellCheck={false}
-                  autoComplete="off"
-                  required
-                />
-              </div>
-            </div>
-            <div className="fin-form__actions">
-              <button
-                className="fin-btn fin-btn--primary fin-btn--sm"
-                disabled={salvando || !clientId || !segredo}
-              >
-                {salvando ? (
-                  <>
-                    <Loader2 size={13} className="fin-spin" /> Conferindo na Pluggy...
-                  </>
-                ) : (
-                  <>
-                    <Check size={13} /> Salvar
-                  </>
-                )}
-              </button>
-              {pronta && (
-                <button
-                  type="button"
-                  className="fin-btn fin-btn--ghost fin-btn--sm"
-                  onClick={() => setEditando(false)}
-                >
-                  Cancelar
-                </button>
-              )}
-            </div>
-          </form>
+          <FormCredencial
+            notificar={notificar}
+            onSalvo={async () => {
+              setEditando(false);
+              await onMudou();
+            }}
+            onCancelar={pronta ? () => setEditando(false) : undefined}
+          />
         </>
       )}
 
