@@ -1211,8 +1211,8 @@ def salvar_credencial():
     with cursor(commit=True) as cur:
         cur.execute(
             "INSERT INTO credenciais_pluggy (usuario_id, client_id, client_secret) "
-            "VALUES (%s, %s, %s) AS novo "
-            "ON DUPLICATE KEY UPDATE client_id = novo.client_id, client_secret = novo.client_secret",
+            "VALUES (%s, %s, %s) "
+            "ON DUPLICATE KEY UPDATE client_id = VALUES(client_id), client_secret = VALUES(client_secret)",
             (uid, client_id, cofre.cifrar(segredo)),
         )
     if anterior and anterior != nova:
@@ -1270,8 +1270,8 @@ def criar_conexao():
     with cursor(commit=True) as cur:
         cur.execute(
             "INSERT INTO conexoes_bancarias (usuario_id, item_id, instituicao) "
-            "VALUES (%s, %s, %s) AS novo "
-            "ON DUPLICATE KEY UPDATE instituicao = novo.instituicao",
+            "VALUES (%s, %s, %s) "
+            "ON DUPLICATE KEY UPDATE instituicao = VALUES(instituicao)",
             (g.sessao["usuario_id"], item_id, item["instituicao"][:120]),
         )
     return jsonify({"ok": True, "instituicao": item["instituicao"]}), 201
@@ -1388,8 +1388,8 @@ def importar_openfinance():
             cur.executemany(
                 "INSERT INTO transacoes (usuario_id, data, nome, valor, natureza, "
                 "categoria, recorrencia, meio, origem_id) "
-                "VALUES (%s, %s, %s, %s, %s, %s, 'unica', %s, %s) AS novo "
-                "ON DUPLICATE KEY UPDATE meio = novo.meio",
+                "VALUES (%s, %s, %s, %s, %s, %s, 'unica', %s, %s) "
+                "ON DUPLICATE KEY UPDATE meio = VALUES(meio)",
                 [(uid, t["data"], t["nome"], t["valor"], t["natureza"], t["categoria"],
                   t["meio"], t["origem_id"]) for t in lista],
             )
@@ -1444,16 +1444,19 @@ def _guardar_descartes(cur, uid, desde, descartes):
         cur.executemany(
             "INSERT INTO descartes (usuario_id, origem_id, data, nome, valor, natureza, meio, "
             "conta, categoria, motivo, par_origem_id) "
-            "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) AS novo "
-            # O MySQL aplica as atribuições da esquerda para a direita: o
-            # veredito é decidido antes de motivo e par serem trocados.
+            "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) "
+            # veredito e conferido_em comparam só o valor antigo da linha com o
+            # novo, sem depender da ordem das atribuições (o MySQL aplica da
+            # esquerda para a direita; o TiDB não garante o mesmo). Por isso
+            # vêm antes de motivo e par serem trocados, e nenhuma lê a outra.
             "ON DUPLICATE KEY UPDATE "
-            "veredito = IF(descartes.motivo <=> novo.motivo "
-            "AND descartes.par_origem_id <=> novo.par_origem_id, descartes.veredito, NULL), "
-            "conferido_em = IF(descartes.veredito IS NULL, NULL, descartes.conferido_em), "
-            "data = novo.data, nome = novo.nome, valor = novo.valor, natureza = novo.natureza, "
-            "meio = novo.meio, conta = novo.conta, categoria = novo.categoria, "
-            "motivo = novo.motivo, par_origem_id = novo.par_origem_id",
+            "veredito = IF(descartes.motivo <=> VALUES(motivo) "
+            "AND descartes.par_origem_id <=> VALUES(par_origem_id), descartes.veredito, NULL), "
+            "conferido_em = IF(descartes.motivo <=> VALUES(motivo) "
+            "AND descartes.par_origem_id <=> VALUES(par_origem_id), descartes.conferido_em, NULL), "
+            "data = VALUES(data), nome = VALUES(nome), valor = VALUES(valor), natureza = VALUES(natureza), "
+            "meio = VALUES(meio), conta = VALUES(conta), categoria = VALUES(categoria), "
+            "motivo = VALUES(motivo), par_origem_id = VALUES(par_origem_id)",
             [(uid, d["origem_id"], d["data"], d["nome"], d["valor"], d["natureza"], d["meio"],
               d["conta"], d["categoria"], d["motivo"], d["par"]) for d in descartes],
         )
@@ -1603,8 +1606,8 @@ def julgar_descarte(descarte_id):
             cur.execute(
                 "INSERT INTO transacoes (usuario_id, data, nome, valor, natureza, "
                 "categoria, recorrencia, meio, origem_id) "
-                "VALUES (%s, %s, %s, %s, %s, %s, 'unica', %s, %s) AS novo "
-                "ON DUPLICATE KEY UPDATE meio = novo.meio",
+                "VALUES (%s, %s, %s, %s, %s, %s, 'unica', %s, %s) "
+                "ON DUPLICATE KEY UPDATE meio = VALUES(meio)",
                 (uid, d["data"], d["nome"], d["valor"], d["natureza"], categoria,
                  d["meio"], d["origem_id"]),
             )
@@ -1706,8 +1709,8 @@ def criar_regra():
 
     with cursor(commit=True) as cur:
         cur.execute(
-            "INSERT INTO regras_categoria (usuario_id, padrao, categoria) VALUES (%s, %s, %s) AS novo "
-            "ON DUPLICATE KEY UPDATE categoria = novo.categoria",
+            "INSERT INTO regras_categoria (usuario_id, padrao, categoria) VALUES (%s, %s, %s) "
+            "ON DUPLICATE KEY UPDATE categoria = VALUES(categoria)",
             (uid, padrao, categoria),
         )
         if alvo:
@@ -1733,9 +1736,27 @@ def apagar_regra(regra_id):
     return jsonify({"ok": True})
 
 
+_TABELAS_ESPERADAS = (
+    "usuarios", "sessoes", "transacoes", "orcamentos", "investimentos", "metas",
+    "subtarefas", "conexoes_bancarias", "credenciais_pluggy", "regras_categoria",
+    "aceites", "descartes", "passkeys", "desafios_webauthn",
+)
+
+
 @app.get("/api/saude")
 def saude():
-    return jsonify({"ok": True, "banco": config.DB_NAME})
+    """Diz se o banco responde e quais tabelas do schema.sql ainda faltam
+    nele (banco da nuvem criado antes de uma tabela nova, por exemplo).
+    Só nomes de tabela, que já estão no repositório."""
+    existentes = {
+        list(r.values())[0]
+        for r in buscar_todos(
+            "SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA = %s",
+            (config.DB_NAME,),
+        )
+    }
+    faltando = [t for t in _TABELAS_ESPERADAS if t not in existentes]
+    return jsonify({"ok": not faltando, "banco": config.DB_NAME, "tabelasFaltando": faltando})
 
 
 def _porta_ocupada(host: str, porta: int) -> bool:
