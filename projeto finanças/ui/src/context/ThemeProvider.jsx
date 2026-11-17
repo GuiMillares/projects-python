@@ -23,6 +23,12 @@ export function ThemeProvider({ children }) {
     // atributo repinta a aplicação inteira sem re-render de componente.
     document.documentElement.setAttribute("data-theme", theme);
     localStorage.setItem(STORAGE_KEY, theme);
+
+    // A barra do sistema no Android (app instalado) segue o theme-color.
+    // Lido do token para não repetir cor fora do tokens.css.
+    const meta = document.querySelector('meta[name="theme-color"]');
+    const cor = getComputedStyle(document.documentElement).getPropertyValue("--fin-bg-2").trim();
+    if (meta && cor) meta.setAttribute("content", cor);
   }, [theme]);
 
   const toggleTheme = useCallback(

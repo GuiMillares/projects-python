@@ -25,6 +25,7 @@ import { usePerfil } from "../context/PerfilProvider";
 import { useTheme } from "../context/ThemeProvider";
 import { sair as encerrarSessao } from "../services/authService";
 import { iniciais } from "../services/perfilService";
+import InstalarApp from "./InstalarApp";
 
 const NAV = [
   { to: "/app", fim: true, icon: LayoutGrid, label: "Visão geral", curto: "Geral" },
@@ -199,7 +200,10 @@ export default function AppLayout({ children }) {
           </div>
         </header>
 
-        <main className="fin-content">{children}</main>
+        <main className="fin-content">
+          <InstalarApp />
+          {children}
+        </main>
       </div>
 
       <nav className="fin-bottomnav" aria-label="Navegação principal">

@@ -92,6 +92,11 @@
   --fin-font: ui-sans-serif, system-ui, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --fin-font-num: ui-monospace, "SF Mono", "Cascadia Mono", "Segoe UI Mono", Menlo, monospace;
 
+  /* Faixa atrás do relógio e da bateria no iPhone, com o app instalado.
+     O iOS escreve esse texto sempre em branco, então a faixa é escura nos
+     dois temas. No navegador comum ela tem altura zero. */
+  --fin-statusbar: #100F0A;
+
   --fin-sidebar-w: 208px;
   --fin-topbar-h: 52px;
   --fin-bottomnav-h: 56px;
@@ -158,6 +163,8 @@
   --fin-gema-15: #8E0E15;
 
   --fin-shadow: 0 10px 30px rgba(35, 31, 24, 0.12);
+
+  --fin-statusbar: #231F18;
 
   color-scheme: light;
 }

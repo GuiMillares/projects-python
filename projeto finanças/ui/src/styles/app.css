@@ -413,7 +413,7 @@ textarea {
   flex-direction: column;
   justify-content: center;
   width: 100%;
-  padding: 32px 20px calc(32px + env(safe-area-inset-bottom));
+  padding: calc(32px + env(safe-area-inset-top, 0px)) 20px calc(32px + env(safe-area-inset-bottom));
 }
 
 @media (min-width: 860px) {
@@ -644,8 +644,12 @@ textarea {
   flex-direction: column;
 }
 
+/* No app instalado no iPhone a página começa atrás do relógio. A borda de
+   cima, da altura da área segura, vira a faixa da barra de status. Fora
+   disso a área segura vale zero e nada muda. */
 .fin-topbar {
-  height: var(--fin-topbar-h);
+  height: calc(var(--fin-topbar-h) + env(safe-area-inset-top, 0px));
+  border-top: env(safe-area-inset-top, 0px) solid var(--fin-statusbar);
   background: var(--fin-bg-2);
   border-bottom: 1px solid var(--fin-border);
   padding: 0 14px;
@@ -1234,6 +1238,26 @@ textarea {
   color: var(--bc, var(--fin-warn));
   font-size: 12.5px;
   margin-bottom: 12px;
+}
+
+/* Convite de instalação: coisa de celular, some no desktop. */
+.fin-instalar {
+  color: var(--fin-text);
+}
+
+.fin-instalar > svg:first-child {
+  color: var(--fin-accent);
+}
+
+.fin-instalar__ico {
+  vertical-align: -2px;
+  color: var(--fin-accent);
+}
+
+@media (min-width: 900px) {
+  .fin-instalar {
+    display: none;
+  }
 }
 
 .fin-banner svg {
@@ -2105,7 +2129,21 @@ textarea {
   color: var(--fin-text);
   display: flex;
   justify-content: center;
-  padding: 28px 16px calc(28px + env(safe-area-inset-bottom));
+  padding: calc(28px + env(safe-area-inset-top, 0px)) 16px calc(28px + env(safe-area-inset-bottom));
+}
+
+/* Telas sem topbar (login, aceite, documentos): a mesma faixa da barra de
+   status, fixa, para o relógio do iPhone não sumir no tema claro. */
+.fin-login::before,
+.fin-legal::before {
+  content: "";
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: env(safe-area-inset-top, 0px);
+  background: var(--fin-statusbar);
+  z-index: 100;
 }
 
 .fin-legal__col {
