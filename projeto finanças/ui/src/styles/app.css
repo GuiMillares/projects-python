@@ -3330,3 +3330,113 @@ textarea {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* ============================================================
+   VIDRO (celular)
+   Barras e botões em vidro: fundo translúcido que desfoca o que passa
+   por trás. Só abaixo de 900px. Cards, tabelas e números seguem
+   opacos: o vidro fica no que se toca, não no que se lê.
+   Quem pede menos transparência no sistema recebe as barras sólidas.
+   ============================================================ */
+@media (max-width: 899px) {
+  .fin-topbar {
+    background: var(--fin-vidro-barra);
+    -webkit-backdrop-filter: blur(28px) saturate(170%);
+    backdrop-filter: blur(28px) saturate(170%);
+    border-bottom-color: var(--fin-vidro-borda);
+  }
+
+  /* A barra de baixo flutua como uma cápsula, solta das bordas. */
+  .fin-bottomnav {
+    left: 12px;
+    right: 12px;
+    bottom: calc(10px + env(safe-area-inset-bottom, 0px));
+    padding: 4px;
+    border: 1px solid var(--fin-vidro-borda);
+    border-radius: 999px;
+    background: var(--fin-vidro-barra);
+    -webkit-backdrop-filter: blur(24px) saturate(180%);
+    backdrop-filter: blur(24px) saturate(180%);
+    box-shadow: inset 0 1px 0 var(--fin-vidro-brilho), 0 10px 30px var(--fin-vidro-sombra);
+  }
+
+  .fin-bottomnav__item {
+    height: calc(var(--fin-bottomnav-h) - 8px);
+    border-radius: 999px;
+    transition: background var(--fin-transition), color var(--fin-transition);
+  }
+
+  /* O item ativo vira uma gota de vidro dentro da cápsula. */
+  .fin-bottomnav__item.active {
+    background: var(--fin-vidro-ativo);
+    box-shadow: inset 0 1px 0 var(--fin-vidro-brilho);
+  }
+
+  .fin-bottomnav__item.active::before {
+    content: none;
+  }
+
+  .fin-content {
+    padding-bottom: calc(var(--fin-bottomnav-h) + 34px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .fin-toast {
+    bottom: calc(var(--fin-bottomnav-h) + 24px + env(safe-area-inset-bottom, 0px));
+  }
+
+  /* Botões: o contorno vira vidro. O primário segue cheio (é a ação da
+     tela e precisa ser lido de longe), só ganha a linha de luz. */
+  .fin-btn--ghost,
+  .fin-btn--outline,
+  .fin-icon-btn,
+  .fin-avatar-btn {
+    background: var(--fin-vidro-botao);
+    -webkit-backdrop-filter: blur(14px) saturate(160%);
+    backdrop-filter: blur(14px) saturate(160%);
+    box-shadow: inset 0 1px 0 var(--fin-vidro-brilho), 0 1px 3px var(--fin-vidro-sombra);
+  }
+
+  .fin-btn--ghost,
+  .fin-icon-btn {
+    border-color: var(--fin-vidro-borda);
+  }
+
+  .fin-btn--primary,
+  .fin-btn--danger {
+    box-shadow: inset 0 1px 0 var(--fin-vidro-brilho), 0 1px 3px var(--fin-vidro-sombra);
+  }
+
+  /* No toque não existe hover: o :hover grudaria no botão depois do
+     toque. Quem responde ao dedo é o :active, que afunda o vidro. */
+  .fin-btn:active:not(:disabled),
+  .fin-icon-btn:active,
+  .fin-avatar-btn:active,
+  .fin-bottomnav__item:active {
+    transform: scale(0.97);
+  }
+
+  .fin-seg {
+    background: var(--fin-vidro-botao);
+    -webkit-backdrop-filter: blur(14px) saturate(160%);
+    backdrop-filter: blur(14px) saturate(160%);
+    box-shadow: inset 0 1px 0 var(--fin-vidro-brilho);
+  }
+}
+
+@media (max-width: 899px) and (prefers-reduced-transparency: reduce) {
+  .fin-topbar,
+  .fin-bottomnav {
+    background: var(--fin-bg-2);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+
+/* Tela de toque: o hover do primário (que esvazia o botão) grudava
+   depois do toque e o botão ficava parecendo desligado. */
+@media (hover: none) {
+  .fin-btn--primary:hover:not(:disabled) {
+    background: var(--fin-accent);
+    color: var(--fin-accent-ink);
+  }
+}

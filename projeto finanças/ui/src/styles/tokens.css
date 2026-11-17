@@ -97,6 +97,16 @@
      dois temas. No navegador comum ela tem altura zero. */
   --fin-statusbar: #100F0A;
 
+  /* ── Vidro (só no celular: barras e botões, ver app.css "Vidro") ──
+     Fundo translúcido + desfoque do que passa por trás. O brilho é uma
+     linha de luz na borda de cima, não um gradiente. */
+  --fin-vidro-barra: rgba(16, 15, 10, 0.74);
+  --fin-vidro-botao: rgba(235, 226, 208, 0.06);
+  --fin-vidro-ativo: rgba(168, 189, 82, 0.16);
+  --fin-vidro-borda: rgba(235, 226, 208, 0.14);
+  --fin-vidro-brilho: rgba(255, 250, 235, 0.10);
+  --fin-vidro-sombra: rgba(0, 0, 0, 0.38);
+
   --fin-sidebar-w: 208px;
   --fin-topbar-h: 52px;
   --fin-bottomnav-h: 56px;
@@ -165,6 +175,13 @@
   --fin-shadow: 0 10px 30px rgba(35, 31, 24, 0.12);
 
   --fin-statusbar: #231F18;
+
+  --fin-vidro-barra: rgba(251, 248, 241, 0.78);
+  --fin-vidro-botao: rgba(255, 255, 255, 0.45);
+  --fin-vidro-ativo: rgba(85, 107, 24, 0.12);
+  --fin-vidro-borda: rgba(35, 31, 24, 0.10);
+  --fin-vidro-brilho: rgba(255, 255, 255, 0.75);
+  --fin-vidro-sombra: rgba(60, 45, 20, 0.14);
 
   color-scheme: light;
 }
